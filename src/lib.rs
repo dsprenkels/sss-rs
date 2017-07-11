@@ -1,3 +1,50 @@
+// TODO(dsprenkels) Move the hazardous symbols to a separate module (with proper documentation
+// and proper warnings)
+/*!
+This crate provides bindings to my [Shamir secret sharing library][sss].
+
+The main functions to use are `create_shares` and `combine_shares`. **`create_keyshares` and
+`combine_shares` are only for experts!** These latter functions miss some security guarantees, so
+do not use them unless you really know what you are doing.
+
+Encapsulated in the `SSSResult`, `combine_shares` will return an `Option<_>` which will be
+`Some(data)` if the data could be restored. If the data could not be restored, `combine_shares`
+will return `Ok(None)`. This means that could mean either of:
+
+1. More shares were needed to reach the treshold.
+2. Shares of different sets (corresponding to different secrets) were supplied or some of the
+   shares were tampered with.
+
+# Example
+
+```rust
+use shamirsecretsharing::*;
+
+// Create a some shares over the secret data `[42, 42, 42, ...]`
+let data = vec![42; DATA_SIZE];
+let count = 5;
+let treshold = 3;
+let mut shares = create_shares(&data, count, treshold).unwrap();
+
+// Lose some shares (for demonstrational purposes)
+shares.remove(2);
+shares.remove(0);
+
+// We still have 3 shares, so we should still be able to restore the secret
+let restored = combine_shares(&shares).unwrap();
+assert_eq!(restored, Some(data));
+
+// If we lose one more share the secret is lost
+shares.remove(0);
+let restored2 = combine_shares(&shares).unwrap();
+assert_eq!(restored2, None);
+```
+
+This library supports can generate sets with at most `count` and a `treshold` shares.
+
+[sss]: https://github.com/dsprenkels/sss
+*/
+
 extern crate libc;
 #[link(name = "sss", kind = "static")]
 
@@ -5,47 +52,59 @@ use libc::{uint8_t, c_int};
 use std::error;
 use std::fmt;
 
+/// Custom error types for errors originating from this crate
+#[derive(Debug, PartialEq, Eq)]
+pub enum SSSError {
+    /// The `n` parameter was invalid
+    InvalidN(u8),
+    /// The `n` parameter was invalid
+    InvalidK(u8),
+    /// There was a (key)share that had an invalid length
+    BadShareLen((usize, usize)),
+    /// The input supplied to a function had an incorrect length
+    BadInputLen(usize),
+}
 
+/// The size of the input data to `create_shares`
 pub const DATA_SIZE: usize = 64;
+/// The size of the input data to `create_keyshares`
+#[doc(hidden)]
 pub const KEY_SIZE: usize = 32;
+/// Regular share size from shares produced by `create_shares`
 pub const SHARE_SIZE: usize = 113;
+/// Keyshare size from shares produced by `create_keyshares`
+#[doc(hidden)]
 pub const KEYSHARE_SIZE: usize = 33;
 
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum SSSError {
-    InvalidN(u8),
-    InvalidK(u8),
-    BadShareLen((usize, usize)),
-    BadDataLen(usize),
-    BadKeyLen(usize),
-}
-
 impl fmt::Display for SSSError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use SSSError::*;
         match *self {
             // Both underlying errors already impl `Display`, so we defer to
             // their implementations.
-            SSSError::InvalidN(n) => write!(f, "Error: invalid share count ({})", n),
-            SSSError::InvalidK(k) => write!(f, "Error: invalid treshold ({})", k),
-            SSSError::BadShareLen((i, x)) => write!(f, "Error: share {} has bad length ({})", i, x),
-            SSSError::BadDataLen(x) => write!(f, "Error: bad data length ({})", x),
-            SSSError::BadKeyLen(x) => write!(f, "Error: bad key length ({})", x),
+            InvalidN(n) => write!(f, "Error: invalid share count ({})", n),
+            InvalidK(k) => write!(f, "Error: invalid treshold ({})", k),
+            BadShareLen((i, x)) => write!(f, "Error: share {} has bad length ({})", i, x),
+            BadInputLen(x) => write!(f, "Error: bad input length ({})", x),
         }
     }
 }
 
 impl error::Error for SSSError {
     fn description(&self) -> &str {
+        use SSSError::*;
         match *self {
-            SSSError::InvalidN(_) => "invalid n",
-            SSSError::InvalidK(_) => "invalid k",
-            SSSError::BadShareLen(_) => "bad share length",
-            SSSError::BadDataLen(_) => "bad data length",
-            SSSError::BadKeyLen(_) => "bad key length",
+            InvalidN(_) => "invalid n",
+            InvalidK(_) => "invalid k",
+            BadShareLen(_) => "bad share length",
+            BadInputLen(_) => "bad input length",
         }
     }
 }
+
+type SSSResult<T> = Result<T, SSSError>;
+
 
 extern {
     fn sss_create_shares(out: *mut uint8_t, data: *const uint8_t, n: uint8_t, k: uint8_t);
@@ -55,7 +114,8 @@ extern {
 }
 
 
-fn check_nk(n: u8, k: u8) -> Result<(), SSSError> {
+/// Check the parameters `n` and `k` and return `Ok(())` if they were valid
+fn check_nk(n: u8, k: u8) -> SSSResult<()> {
     if n < 1 {
         return Err(SSSError::InvalidN(n));
     }
@@ -65,25 +125,58 @@ fn check_nk(n: u8, k: u8) -> Result<(), SSSError> {
     Ok(())
 }
 
-fn check_data_len(data: &[u8]) -> Result<(), SSSError> {
+/// Check `data` and return `Ok(())` if its length is correct for being shared with
+/// `create_shares`
+fn check_data_len(data: &[u8]) -> SSSResult<()> {
     if data.len() != DATA_SIZE {
-        Err(SSSError::BadDataLen(data.len()))
+        Err(SSSError::BadInputLen(data.len()))
     } else {
         Ok(())
     }
 }
 
 
-fn check_key_len(key: &[u8]) -> Result<(), SSSError> {
+/// Check `key` and return `Ok(())` if its length is correct for being shared with
+/// `create_keyshares`
+fn check_key_len(key: &[u8]) -> SSSResult<()> {
     if key.len() != KEY_SIZE {
-        Err(SSSError::BadKeyLen(key.len()))
+        Err(SSSError::BadInputLen(key.len()))
     } else {
         Ok(())
     }
 }
 
 
-pub fn create_shares(data: &[u8], n: u8, k: u8) -> Result<Vec<Vec<u8>>, SSSError> {
+/**
+Create a set of shares
+
+- `data` must be a `&[u8]` slice of length `DATA_SIZE` (64)
+- `n` is the number of shares that is to be generated
+- `k` is the treshold value of how many shares are needed to restore the secret
+
+The value that is returned is a newly allocated vector of vectors. Each of these vectors will
+contain `SHARE_SIZE` `u8` items.
+
+# Example
+```
+use shamirsecretsharing::*;
+
+// Create a some shares over the secret data `[42, 42, 42, ...]`
+let data = vec![42; DATA_SIZE];
+let count = 5;
+let treshold = 3;
+let shares = create_shares(&data, count, treshold);
+match shares {
+ Ok(shares) => println!("Created some shares: {:?}", shares),
+ Err(err) => panic!("Oops! Something went wrong: {}", err),
+}
+```
+*/
+pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
+    // TODO(dsprenks) Currenlty this function uses the `group` function to group the shares from
+    // the output buffer that `sss_create_shares` fills for us. While it is good that this uses
+    // no unsafe code, it *does* use a 10 lines of helper function and it needs an extra `tmp`
+    // vector. We should probably rewrite this to use `Vec::from_raw_parts` instead.
     try!(check_nk(n, k));
     try!(check_data_len(data));
 
@@ -111,7 +204,45 @@ pub fn create_shares(data: &[u8], n: u8, k: u8) -> Result<Vec<Vec<u8>>, SSSError
 }
 
 
-pub fn combine_shares(shares: &Vec<Vec<u8>>) -> Result<Option<Vec<u8>>, SSSError> {
+/**
+Combine a set of shares and return the original secret
+
+`shares` must be a slice of share vectors.
+
+The return type will be a `Result` which will only be `Err(err)` of the input shares were
+malformed. When the input shares are of the correct length, this function will always return
+`Ok(())`.
+
+Attempts at restoring a secret may fail. Then `combine_shares` will return `Ok(None)`. This only
+cases in which this can happen are:
+
+1. More shares were needed to reach the treshold.
+2. Shares of different sets (corresponding to different secrets) were supplied or some of the
+   shares were tampered with.
+
+If the shares were correct---and a secret could be restored---this function will return
+`Ok(Some(data))`, with `data` being a vector of `u8`s. This `data` will be the same length as When
+it was shared, namely `DATA_SIZE` (64) bytes.
+
+# Example
+
+```rust
+use shamirsecretsharing::*;
+
+# let mut shares = create_shares(&vec![42; DATA_SIZE], 3, 3).unwrap();
+// When `shares` contains a set of valid shares
+let restored = combine_shares(&shares).unwrap();
+let data = restored.expect("`shares` did not contain a valid set of shares");
+println!("Restored some data: {:?}", data);
+
+# // Remove a share s.t. the treshold is not reached
+# shares.pop();
+// When `shares` contains an invalid set of shares
+let restored = combine_shares(&shares).unwrap();
+assert_eq!(restored, None);
+```
+*/
+pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
     for (i, share) in shares.iter().enumerate() {
         if share.len() != SHARE_SIZE {
             return Err(SSSError::BadShareLen((i, share.len())));
@@ -139,7 +270,8 @@ pub fn combine_shares(shares: &Vec<Vec<u8>>) -> Result<Option<Vec<u8>>, SSSError
 }
 
 
-pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> Result<Vec<Vec<u8>>, SSSError> {
+#[doc(hidden)]
+pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
     try!(check_nk(n, k));
     try!(check_key_len(key));
 
@@ -163,11 +295,14 @@ pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> Result<Vec<Vec<u8>>, SSSErr
     };
 
     // Put each share in a separate Vec
+    // TODO(dsprenks) Just as in `create_shares`, we should use `Vec::from_raw_parts` instead
+    // of the complex fold.
     Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), group))
 }
 
 
-pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> Result<Vec<u8>, SSSError> {
+#[doc(hidden)]
+pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
     for (i, keyshare) in keyshares.iter().enumerate() {
         if keyshare.len() != KEYSHARE_SIZE {
             return Err(SSSError::BadShareLen((i, keyshare.len())));
