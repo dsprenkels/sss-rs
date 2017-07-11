@@ -1,0 +1,3 @@
+[submodule "sss"]
+	path = sss
+	url = https://github.com/dsprenkels/sss.git
