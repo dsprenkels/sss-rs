@@ -3,3 +3,6 @@ rust:
   - stable
   - beta
   - nightly
+env:
+  - CC=gcc
+  - CC=clang
