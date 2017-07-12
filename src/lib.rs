@@ -127,6 +127,23 @@ fn check_data_len(data: &[u8]) -> SSSResult<()> {
 }
 
 
+/// Return a closure which groups elements into a new Vec `acc` in-place
+///
+/// This function is to be used in combination with `fold`. See `tests::group` for an example.
+fn group<T>(group_size: usize) -> Box<Fn(Vec<Vec<T>>, T) -> Vec<Vec<T>>> {
+    Box::new(move |mut acc, x| {
+        if acc.last().map_or(false, |x| x.len() < group_size) {
+            acc.last_mut().unwrap().push(x);
+        } else {
+            let mut new_group = Vec::with_capacity(group_size);
+            new_group.push(x);
+            acc.push(new_group);
+        }
+        acc
+    })
+}
+
+
 /**
 Create a set of shares
 
@@ -153,34 +170,17 @@ match shares {
 ```
 */
 pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
-    // TODO(dsprenks) Currenlty this function uses the `group` function to group the shares from
-    // the output buffer that `sss_create_shares` fills for us. While it is good that this uses
-    // no unsafe code, it *does* use a 10 lines of helper function and it needs an extra `tmp`
-    // vector. We should probably rewrite this to use `Vec::from_raw_parts` instead.
     try!(check_nk(n, k));
     try!(check_data_len(data));
 
     // Restore the shares into one buffer
-    let mut tmp = Vec::with_capacity(SHARE_SIZE * (n as usize));
+    let mut tmp = vec![0; SHARE_SIZE * (n as usize)];
     unsafe {
         sss_create_shares(tmp.as_mut_ptr(), data.as_ptr(), n, k);
-        tmp.set_len(SHARE_SIZE * (n as usize)); // `sss_create_shares` has written to `tmp`
     }
 
-    // This function groups the elements in `tmp` into a new Vec `acc` in-place.
-    let group = |mut acc: Vec<Vec<_>>, x| {
-        if acc.last().map_or(false, |x| x.len() < SHARE_SIZE) {
-            acc.last_mut().unwrap().push(x);
-        } else {
-            let mut new_group = Vec::with_capacity(SHARE_SIZE);
-            new_group.push(x);
-            acc.push(new_group);
-        }
-        acc
-    };
-
     // Put each share in a separate Vec
-    Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), group))
+    Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
 }
 
 
@@ -236,11 +236,9 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
     }
 
     // Combine the shares
-    let mut data = Vec::with_capacity(DATA_SIZE);
+    let mut data = vec![0; DATA_SIZE];
     let ret = unsafe {
-        let ret = sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as uint8_t);
-        data.set_len(DATA_SIZE);
-        ret
+        sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as uint8_t)
     };
 
     match ret {
@@ -270,7 +268,7 @@ pub mod hazmat {
     */
 
     use libc::uint8_t;
-    use super::{SSSResult, SSSError};
+    use super::*;
 
     extern {
         fn sss_create_keyshares(out: *mut uint8_t, key: *const uint8_t, n: uint8_t, k: uint8_t);
@@ -321,32 +319,17 @@ pub mod hazmat {
     ```
     */
     pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
-        try!(super::check_nk(n, k));
+        try!(check_nk(n, k));
         try!(check_key_len(key));
 
         // Restore the keyshares into one buffer
-        let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * (n as usize));
+        let mut tmp = vec![0; KEYSHARE_SIZE * (n as usize)];
         unsafe {
             sss_create_keyshares(tmp.as_mut_ptr(), key.as_ptr(), n, k);
-            tmp.set_len(KEYSHARE_SIZE * (n as usize)); // `sss_create_shares` has written to `tmp`
         }
 
-        // This function groups the elements in `tmp` into a new Vec `acc` in-place.
-        let group = |mut acc: Vec<Vec<_>>, x| {
-            if acc.last().map_or(false, |x| x.len() < KEYSHARE_SIZE) {
-                acc.last_mut().unwrap().push(x);
-            } else {
-                let mut new_group = Vec::with_capacity(KEYSHARE_SIZE);
-                new_group.push(x);
-                acc.push(new_group);
-            }
-            acc
-        };
-
         // Put each share in a separate Vec
-        // TODO(dsprenks) Just as in `create_shares`, we should use `Vec::from_raw_parts` instead
-        // of the complex fold.
-        Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), group))
+        Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
     }
 
 
@@ -404,10 +387,9 @@ pub mod hazmat {
         }
 
         // Combine the keyshares
-        let mut key = Vec::with_capacity(KEY_SIZE);
+        let mut key = vec![0; KEY_SIZE];
         unsafe {
             sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as uint8_t);
-            key.set_len(KEY_SIZE);
         };
 
         Ok(key)
@@ -419,7 +401,7 @@ pub mod hazmat {
         const KEY: &[u8] = &[42; KEY_SIZE];
 
         #[test]
-        fn create_keyshares_ok() {
+        fn test_create_keyshares_ok() {
             let keyshares = create_keyshares(KEY, 5, 3).unwrap();
             assert_eq!(keyshares.len(), 5);
             for keyshare in keyshares {
@@ -428,7 +410,7 @@ pub mod hazmat {
         }
 
         #[test]
-        fn combine_keyshares_ok() {
+        fn test_combine_keyshares_ok() {
             let mut keyshares = create_keyshares(KEY, 5, 3).unwrap();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
@@ -452,7 +434,16 @@ mod tests {
     const DATA: &[u8] = &[42; DATA_SIZE];
 
     #[test]
-    fn create_shares_ok() {
+    fn test_group() {
+        let dna = vec!['C', 'T', 'G', 'G', 'A', 'A', 'C', 'A', 'G'];
+        let expected = vec![vec!['C', 'T', 'G'], vec!['G', 'A', 'A'], vec!['C', 'A', 'G']];
+
+        let triplets = dna.into_iter().fold(Vec::new(), &*group(3));
+        assert_eq!(triplets, expected);
+    }
+
+    #[test]
+    fn test_create_shares_ok() {
         let shares = create_shares(DATA, 5, 3).unwrap();
         assert_eq!(shares.len(), 5);
         for share in shares {
@@ -461,14 +452,14 @@ mod tests {
     }
 
     #[test]
-    fn create_shares_err() {
+    fn test_create_shares_err() {
         assert_eq!(create_shares(DATA, 0, 0), Err(SSSError::InvalidN(0)));
         assert_eq!(create_shares(DATA, 5, 0), Err(SSSError::InvalidK(0)));
         assert_eq!(create_shares(DATA, 5, 6), Err(SSSError::InvalidK(6)));
     }
 
     #[test]
-    fn combine_shares_ok() {
+    fn test_combine_shares_ok() {
         let mut shares = create_shares(DATA, 5, 3).unwrap();
         assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
         shares.pop();
@@ -484,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn combine_shares_err() {
+    fn test_combine_shares_err() {
         let shares = vec![vec![]];
         assert_eq!(combine_shares(&shares), Err(SSSError::BadShareLen((0, 0))));
     }
