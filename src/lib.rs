@@ -1,5 +1,3 @@
-// TODO(dsprenkels) Move the hazardous symbols to a separate module (with proper documentation
-// and proper warnings)
 /*!
 This crate provides bindings to my [Shamir secret sharing library][sss].
 
@@ -65,16 +63,11 @@ pub enum SSSError {
     BadInputLen(usize),
 }
 
+
 /// The size of the input data to `create_shares`
 pub const DATA_SIZE: usize = 64;
-/// The size of the input data to `create_keyshares`
-#[doc(hidden)]
-pub const KEY_SIZE: usize = 32;
 /// Regular share size from shares produced by `create_shares`
 pub const SHARE_SIZE: usize = 113;
-/// Keyshare size from shares produced by `create_keyshares`
-#[doc(hidden)]
-pub const KEYSHARE_SIZE: usize = 33;
 
 
 impl fmt::Display for SSSError {
@@ -109,8 +102,6 @@ type SSSResult<T> = Result<T, SSSError>;
 extern {
     fn sss_create_shares(out: *mut uint8_t, data: *const uint8_t, n: uint8_t, k: uint8_t);
     fn sss_combine_shares(data: *mut uint8_t, shares: *const uint8_t, k: uint8_t) -> c_int;
-    fn sss_create_keyshares(out: *mut uint8_t, key: *const uint8_t, n: uint8_t, k: uint8_t);
-    fn sss_combine_keyshares(key: *mut uint8_t, shares: *const uint8_t, k: uint8_t);
 }
 
 
@@ -130,17 +121,6 @@ fn check_nk(n: u8, k: u8) -> SSSResult<()> {
 fn check_data_len(data: &[u8]) -> SSSResult<()> {
     if data.len() != DATA_SIZE {
         Err(SSSError::BadInputLen(data.len()))
-    } else {
-        Ok(())
-    }
-}
-
-
-/// Check `key` and return `Ok(())` if its length is correct for being shared with
-/// `create_keyshares`
-fn check_key_len(key: &[u8]) -> SSSResult<()> {
-    if key.len() != KEY_SIZE {
-        Err(SSSError::BadInputLen(key.len()))
     } else {
         Ok(())
     }
@@ -270,59 +250,118 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
 }
 
 
-#[doc(hidden)]
-pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
-    try!(check_nk(n, k));
-    try!(check_key_len(key));
+pub mod hazmat {
+    use libc::uint8_t;
+    use super::{SSSResult, SSSError};
 
-    // Restore the keyshares into one buffer
-    let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * (n as usize));
-    unsafe {
-        sss_create_keyshares(tmp.as_mut_ptr(), key.as_ptr(), n, k);
-        tmp.set_len(KEYSHARE_SIZE * (n as usize)); // `sss_create_shares` has written to `tmp`
+    extern {
+        fn sss_create_keyshares(out: *mut uint8_t, key: *const uint8_t, n: uint8_t, k: uint8_t);
+        fn sss_combine_keyshares(key: *mut uint8_t, shares: *const uint8_t, k: uint8_t);
     }
 
-    // This function groups the elements in `tmp` into a new Vec `acc` in-place.
-    let group = |mut acc: Vec<Vec<_>>, x| {
-        if acc.last().map_or(false, |x| x.len() < KEYSHARE_SIZE) {
-            acc.last_mut().unwrap().push(x);
+    /// The size of the input data to `create_keyshares`
+    #[doc(hidden)]
+    pub const KEY_SIZE: usize = 32;
+
+    /// Keyshare size from shares produced by `create_keyshares`
+    #[doc(hidden)]
+    pub const KEYSHARE_SIZE: usize = 33;
+
+    /// Check `key` and return `Ok(())` if its length is correct for being shared with
+    /// `create_keyshares`
+    fn check_key_len(key: &[u8]) -> SSSResult<()> {
+        if key.len() != KEY_SIZE {
+            Err(SSSError::BadInputLen(key.len()))
         } else {
-            let mut new_group = Vec::with_capacity(KEYSHARE_SIZE);
-            new_group.push(x);
-            acc.push(new_group);
-        }
-        acc
-    };
-
-    // Put each share in a separate Vec
-    // TODO(dsprenks) Just as in `create_shares`, we should use `Vec::from_raw_parts` instead
-    // of the complex fold.
-    Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), group))
-}
-
-
-#[doc(hidden)]
-pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
-    for (i, keyshare) in keyshares.iter().enumerate() {
-        if keyshare.len() != KEYSHARE_SIZE {
-            return Err(SSSError::BadShareLen((i, keyshare.len())));
+            Ok(())
         }
     }
 
-    // Build a slice containing all the keyshares sequentially
-    let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * keyshares.len());
-    for keyshare in keyshares {
-        tmp.extend(keyshare.iter());
+    #[doc(hidden)]
+    pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
+        try!(super::check_nk(n, k));
+        try!(check_key_len(key));
+
+        // Restore the keyshares into one buffer
+        let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * (n as usize));
+        unsafe {
+            sss_create_keyshares(tmp.as_mut_ptr(), key.as_ptr(), n, k);
+            tmp.set_len(KEYSHARE_SIZE * (n as usize)); // `sss_create_shares` has written to `tmp`
+        }
+
+        // This function groups the elements in `tmp` into a new Vec `acc` in-place.
+        let group = |mut acc: Vec<Vec<_>>, x| {
+            if acc.last().map_or(false, |x| x.len() < KEYSHARE_SIZE) {
+                acc.last_mut().unwrap().push(x);
+            } else {
+                let mut new_group = Vec::with_capacity(KEYSHARE_SIZE);
+                new_group.push(x);
+                acc.push(new_group);
+            }
+            acc
+        };
+
+        // Put each share in a separate Vec
+        // TODO(dsprenks) Just as in `create_shares`, we should use `Vec::from_raw_parts` instead
+        // of the complex fold.
+        Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), group))
     }
 
-    // Combine the keyshares
-    let mut key = Vec::with_capacity(KEY_SIZE);
-    unsafe {
-        sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as uint8_t);
-        key.set_len(KEY_SIZE);
-    };
 
-    Ok(key)
+    #[doc(hidden)]
+    pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
+        for (i, keyshare) in keyshares.iter().enumerate() {
+            if keyshare.len() != KEYSHARE_SIZE {
+                return Err(SSSError::BadShareLen((i, keyshare.len())));
+            }
+        }
+
+        // Build a slice containing all the keyshares sequentially
+        let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * keyshares.len());
+        for keyshare in keyshares {
+            tmp.extend(keyshare.iter());
+        }
+
+        // Combine the keyshares
+        let mut key = Vec::with_capacity(KEY_SIZE);
+        unsafe {
+            sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as uint8_t);
+            key.set_len(KEY_SIZE);
+        };
+
+        Ok(key)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        const KEY: &[u8] = &[42; KEY_SIZE];
+
+        #[test]
+        fn create_keyshares_ok() {
+            let keyshares = create_keyshares(KEY, 5, 3).unwrap();
+            assert_eq!(keyshares.len(), 5);
+            for keyshare in keyshares {
+                assert_eq!(keyshare.len(), KEYSHARE_SIZE);;
+            }
+        }
+
+        #[test]
+        fn combine_keyshares_ok() {
+            let mut keyshares = create_keyshares(KEY, 5, 3).unwrap();
+            assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
+            keyshares.pop();
+            assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
+            keyshares.pop();
+            assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
+            keyshares.pop();
+            assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
+            keyshares.pop();
+            assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
+            keyshares.pop();
+            assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
+        }
+    }
 }
 
 
@@ -330,7 +369,6 @@ pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
 mod tests {
     use super::*;
     const DATA: &[u8] = &[42; DATA_SIZE];
-    const KEY: &[u8] = &[42; KEY_SIZE];
 
     #[test]
     fn create_shares_ok() {
@@ -368,30 +406,5 @@ mod tests {
     fn combine_shares_err() {
         let shares = vec![vec![]];
         assert_eq!(combine_shares(&shares), Err(SSSError::BadShareLen((0, 0))));
-    }
-
-    #[test]
-    fn create_keyshares_ok() {
-        let keyshares = create_keyshares(KEY, 5, 3).unwrap();
-        assert_eq!(keyshares.len(), 5);
-        for keyshare in keyshares {
-            assert_eq!(keyshare.len(), KEYSHARE_SIZE);;
-        }
-    }
-
-    #[test]
-    fn combine_keyshares_ok() {
-        let mut keyshares = create_keyshares(KEY, 5, 3).unwrap();
-        assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
-        keyshares.pop();
-        assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
-        keyshares.pop();
-        assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
-        keyshares.pop();
-        assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
-        keyshares.pop();
-        assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
-        keyshares.pop();
-        assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
     }
 }
