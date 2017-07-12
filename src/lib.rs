@@ -191,7 +191,7 @@ Combine a set of shares and return the original secret
 
 The return type will be a `Result` which will only be `Err(err)` of the input shares were
 malformed. When the input shares are of the correct length, this function will always return
-`Ok(())`.
+`Ok(_)`.
 
 Attempts at restoring a secret may fail. Then `combine_shares` will return `Ok(None)`. This only
 cases in which this can happen are:
@@ -251,6 +251,24 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
 
 
 pub mod hazmat {
+    /*!
+    Hazardous materials (key-sharing)
+
+    This is the `hazmat` module. This stands for **hazardous materials**. This module is only to
+    be used for experts, because it does not have all the straightforward guarantees that the
+    normal API has. E.g. where the [normal API](../index.html) prevents tampering with the shares,
+    this API does not do any integrity checks, etc. Only use this module when you are really sure
+    that Shamir secret sharing is secure in your use case! _If you are not sure about this, you
+    are probably lost ([go back](../index.html))._
+
+    Example stuff that you will need to guarantee when using this API (not exhaustive):
+
+    - All shared keys are uniformly random.
+    - Keys produced by `combine_keyshares` are kept secret even if they did not manage to restore
+      a secret.
+    - _You_ will check the integrity of the restored secrets (or integrity is not a requirement).
+    */
+
     use libc::uint8_t;
     use super::{SSSResult, SSSError};
 
@@ -260,11 +278,9 @@ pub mod hazmat {
     }
 
     /// The size of the input data to `create_keyshares`
-    #[doc(hidden)]
     pub const KEY_SIZE: usize = 32;
 
     /// Keyshare size from shares produced by `create_keyshares`
-    #[doc(hidden)]
     pub const KEYSHARE_SIZE: usize = 33;
 
     /// Check `key` and return `Ok(())` if its length is correct for being shared with
@@ -277,7 +293,33 @@ pub mod hazmat {
         }
     }
 
-    #[doc(hidden)]
+    /**
+    Create a set of key shares
+
+    - `key` must be a `&[u8]` slice of length `DATA_SIZE` (32)
+    - `n` is the number of shares that is to be generated
+    - `k` is the treshold value of how many shares are needed to restore the secret
+
+    The value that is returned is a newly allocated vector of vectors. Each of these vectors will
+    contain `KEYSHARE_SIZE` `u8` items.
+
+    # Example
+    ```
+    use shamirsecretsharing::hazmat::*;
+
+    # let key = vec![42; KEY_SIZE];
+    // With a `key` vector containing a uniform key
+
+    // Create a some key shares of the secret key
+    let count = 5;
+    let treshold = 3;
+    let keyshares = create_keyshares(&key, count, treshold);
+    match keyshares {
+        Ok(keyshares) => println!("Created some keyshares: {:?}", keyshares),
+        Err(err) => panic!("Oops! Something went wrong: {}", err),
+    }
+    ```
+    */
     pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
         try!(super::check_nk(n, k));
         try!(check_key_len(key));
@@ -308,7 +350,46 @@ pub mod hazmat {
     }
 
 
-    #[doc(hidden)]
+    /**
+    Combine a set of key shares and return the original key
+
+    `keyshares` must be a slice of keyshare vectors.
+
+    The return type will be a `Result` which will only be `Err(err)` of the input key shares were
+    malformed. When the input key shares are of the correct length, this function will always
+    return `Ok(_)`.
+
+    Restoring the secret will fail in the same cases as with `combine_shares`:
+
+    1. More shares were needed to reach the treshold.
+    2. Shares of different sets (corresponding to different keys) were supplied or some of the
+       keyshares were tampered with.
+
+    Opposed to `combine_shares`, this function will always return a restored key buffer. This
+    restored key MAY be correct. The function just performs the cryptographic calculation, but
+    does not know if restoration succeeded. However, **treat all output from this function as
+    secret**. Even if combining the key shares failed, the returned buffer can tell an attacker
+    information of the shares that were used to make it. The best way to secure this is by using
+    a cryptographic integrity check to secure the integrity of the key.
+
+    # Example
+
+    ```rust
+    use shamirsecretsharing::hazmat::*;
+
+    # let mut key = vec![42; KEY_SIZE];
+    # let mut keyshares = create_keyshares(&key, 3, 3).unwrap();
+    // When `keyshares` contains a set of valid shares for `key`
+    let restored = combine_keyshares(&keyshares).unwrap();
+    assert_eq!(restored, key);
+
+    # // Remove a key share s.t. the treshold is not reached
+    # keyshares.pop();
+    // When `keyshares` contains an invalid set of key shares
+    let restored = combine_keyshares(&keyshares).unwrap();
+    assert_ne!(restored, key);
+    ```
+    */
     pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
         for (i, keyshare) in keyshares.iter().enumerate() {
             if keyshare.len() != KEYSHARE_SIZE {
