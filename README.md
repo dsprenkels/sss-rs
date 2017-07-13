@@ -4,10 +4,10 @@
 
 `sss-rs` contains Rust bindings for my [Shamir secret sharing library][sss].
 This library allows users to split secret data into a number of differemnt
-shares. With the posession of some or all of these shares, the original secret
+shares. With the possession of some or all of these shares, the original secret
 can be restored.
 
-An example use case is a beer brewery which has a vault which conains their
+An example use case is a beer brewery which has a vault which contains their
 precious super secret recipe. The 5 board members of this brewery do not trust
 all the others well enough that they won't secretly break into the vault and
 sell the recipe to a competitor. So they split the code into 5 shares, and
