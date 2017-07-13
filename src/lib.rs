@@ -228,9 +228,14 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
         }
     }
 
+    // Dedup the shares
+    let mut shares = Vec::from(shares);
+    shares.sort();
+    shares.dedup();
+
     // Build a slice containing all the shares sequentially
     let mut tmp = Vec::with_capacity(SHARE_SIZE * shares.len());
-    for share in shares {
+    for share in shares.iter() {
         tmp.extend(share.iter());
     }
 
@@ -477,5 +482,13 @@ mod tests {
     fn test_combine_shares_err() {
         let shares = vec![vec![]];
         assert_eq!(combine_shares(&shares), Err(SSSError::BadShareLen((0, 0))));
+    }
+
+    #[test]
+    fn test_combine_shares_dedup() {
+        let mut shares = create_shares(DATA, 5, 4).unwrap();
+        let dup = shares[3].clone();
+        shares.push(dup);
+        assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
     }
 }
