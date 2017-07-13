@@ -21,18 +21,17 @@ use shamirsecretsharing::*;
 // Create a some shares over the secret data `[42, 42, 42, ...]`
 let data = vec![42; DATA_SIZE];
 let count = 5;
-let treshold = 3;
+let treshold = 4;
 let mut shares = create_shares(&data, count, treshold).unwrap();
 
-// Lose some shares (for demonstrational purposes)
-shares.remove(2);
-shares.remove(0);
+// Lose a share (for demonstrational purposes)
+shares.remove(3);
 
-// We still have 3 shares, so we should still be able to restore the secret
+// We still have 4 shares, so we should still be able to restore the secret
 let restored = combine_shares(&shares).unwrap();
 assert_eq!(restored, Some(data));
 
-// If we lose one more share the secret is lost
+// If we lose another share the secret is lost
 shares.remove(0);
 let restored2 = combine_shares(&shares).unwrap();
 assert_eq!(restored2, None);
@@ -161,7 +160,7 @@ use shamirsecretsharing::*;
 // Create a some shares over the secret data `[42, 42, 42, ...]`
 let data = vec![42; DATA_SIZE];
 let count = 5;
-let treshold = 3;
+let treshold = 4;
 let shares = create_shares(&data, count, treshold);
 match shares {
  Ok(shares) => println!("Created some shares: {:?}", shares),
@@ -310,7 +309,7 @@ pub mod hazmat {
 
     // Create a some key shares of the secret key
     let count = 5;
-    let treshold = 3;
+    let treshold = 4;
     let keyshares = create_keyshares(&key, count, treshold);
     match keyshares {
         Ok(keyshares) => println!("Created some keyshares: {:?}", keyshares),
@@ -402,7 +401,7 @@ pub mod hazmat {
 
         #[test]
         fn test_create_keyshares_ok() {
-            let keyshares = create_keyshares(KEY, 5, 3).unwrap();
+            let keyshares = create_keyshares(KEY, 5, 4).unwrap();
             assert_eq!(keyshares.len(), 5);
             for keyshare in keyshares {
                 assert_eq!(keyshare.len(), KEYSHARE_SIZE);;
@@ -411,12 +410,12 @@ pub mod hazmat {
 
         #[test]
         fn test_combine_keyshares_ok() {
-            let mut keyshares = create_keyshares(KEY, 5, 3).unwrap();
+            let mut keyshares = create_keyshares(KEY, 5, 4).unwrap();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
-            assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
+            assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
             assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
@@ -444,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_create_shares_ok() {
-        let shares = create_shares(DATA, 5, 3).unwrap();
+        let shares = create_shares(DATA, 5, 4).unwrap();
         assert_eq!(shares.len(), 5);
         for share in shares {
             assert_eq!(share.len(), SHARE_SIZE);
@@ -460,12 +459,12 @@ mod tests {
 
     #[test]
     fn test_combine_shares_ok() {
-        let mut shares = create_shares(DATA, 5, 3).unwrap();
+        let mut shares = create_shares(DATA, 5, 4).unwrap();
         assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
         shares.pop();
         assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
         shares.pop();
-        assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
+        assert_eq!(combine_shares(&shares).unwrap(), None);
         shares.pop();
         assert_eq!(combine_shares(&shares).unwrap(), None);
         shares.pop();

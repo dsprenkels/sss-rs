@@ -11,9 +11,9 @@ An example use case is a beer brewery which has a vault which conains their
 precious super secret recipe. The 5 board members of this brewery do not trust
 all the others well enough that they won't secretly break into the vault and
 sell the recipe to a competitor. So they split the code into 5 shares, and
-allow 3 shares to restore the original code. Now they are sure that the
-majority of the staff will know when the vault is opened, but they also don't
-need *all* the shares if they want to open the vault.
+allow 4 shares to restore the original code. Now they are sure that the
+majority of the staff will know when the vault is opened, but they can still
+open the vault when one of the staff members is abroad or sick at home.
 
 ## Installation
 
@@ -40,18 +40,17 @@ use shamirsecretsharing::*;
 // Create a some shares over the secret data `[42, 42, 42, ...]`
 let data = vec![42; DATA_SIZE];
 let count = 5;
-let treshold = 3;
+let treshold = 4;
 let mut shares = create_shares(&data, count, treshold).unwrap();
 
-// Lose some shares (for demonstrational purposes)
-shares.remove(2);
-shares.remove(0);
+// Lose a share (for demonstrational purposes)
+shares.remove(3);
 
-// We still have 3 shares, so we should still be able to restore the secret
+// We still have 4 shares, so we should still be able to restore the secret
 let restored = combine_shares(&shares).unwrap();
 assert_eq!(restored, Some(data));
 
-// If we lose one more share the secret is lost
+// If we lose another share the secret is lost
 shares.remove(0);
 let restored2 = combine_shares(&shares).unwrap();
 assert_eq!(restored2, None);
