@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/dsprenkels/sss-rs.svg?branch=master)](https://travis-ci.org/dsprenkels/sss-rs)
 
 `sss-rs` contains Rust bindings for my [Shamir secret sharing library][sss].
-This library allows users to split secret data into a number of differemnt
+This library allows users to split secret data into a number of different
 shares. With the possession of some or all of these shares, the original secret
 can be restored.
 
