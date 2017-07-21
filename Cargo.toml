@@ -2,7 +2,6 @@
 name = "shamirsecretsharing"
 version = "0.1.0"
 authors = ["Daan Sprenkels <hello@dsprenkels.com>"]
-# build = "build.rs"
 
 [dependencies]
 libc = "0.2.0"

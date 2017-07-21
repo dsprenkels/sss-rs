@@ -2,7 +2,7 @@
 This crate provides bindings to my [Shamir secret sharing library][sss].
 
 The main functions to use are `create_shares` and `combine_shares`. **`create_keyshares` and
-`combine_shares` are only for experts!** These latter functions miss some security guarantees, so
+`combine_keyshares` are only for experts!** These latter functions miss some security guarantees, so
 do not use them unless you really know what you are doing.
 
 Encapsulated in the `SSSResult`, `combine_shares` will return an `Option<_>` which will be
