@@ -99,7 +99,7 @@ impl error::Error for SSSError {
 type SSSResult<T> = Result<T, SSSError>;
 
 
-extern {
+extern "C" {
     fn sss_create_shares(out: *mut uint8_t, data: *const uint8_t, n: uint8_t, k: uint8_t);
     fn sss_combine_shares(data: *mut uint8_t, shares: *const uint8_t, k: uint8_t) -> c_int;
 }
@@ -180,7 +180,8 @@ pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
     }
 
     // Put each share in a separate Vec
-    Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
+    Ok(tmp.into_iter()
+           .fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
 }
 
 
@@ -242,9 +243,8 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
 
     // Combine the shares
     let mut data = vec![0; DATA_SIZE];
-    let ret = unsafe {
-        sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as uint8_t)
-    };
+    let ret =
+        unsafe { sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as uint8_t) };
 
     match ret {
         0 => Ok(Some(data)),
@@ -275,7 +275,7 @@ pub mod hazmat {
     use libc::uint8_t;
     use super::*;
 
-    extern {
+    extern "C" {
         fn sss_create_keyshares(out: *mut uint8_t, key: *const uint8_t, n: uint8_t, k: uint8_t);
         fn sss_combine_keyshares(key: *mut uint8_t, shares: *const uint8_t, k: uint8_t);
     }
@@ -334,7 +334,8 @@ pub mod hazmat {
         }
 
         // Put each share in a separate Vec
-        Ok(tmp.into_iter().fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
+        Ok(tmp.into_iter()
+               .fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
     }
 
 
@@ -394,7 +395,9 @@ pub mod hazmat {
         // Combine the keyshares
         let mut key = vec![0; KEY_SIZE];
         unsafe {
-            sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as uint8_t);
+            sss_combine_keyshares(key.as_mut_ptr(),
+                                  tmp.as_mut_ptr(),
+                                  keyshares.len() as uint8_t);
         };
 
         Ok(key)
