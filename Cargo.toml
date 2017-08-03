@@ -2,6 +2,10 @@
 name = "shamirsecretsharing"
 version = "0.1.0"
 authors = ["Daan Sprenkels <hello@dsprenkels.com>"]
+description = "Shamir secret sharing library for Rust"
+license = "MIT"
+license-file = "LICENSE"
+repository = "https://github.com/dsprenkels/sss-rs"
 
 [dependencies]
 libc = "0.2.0"
