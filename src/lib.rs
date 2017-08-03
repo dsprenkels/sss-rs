@@ -237,7 +237,7 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
 
     // Build a slice containing all the shares sequentially
     let mut tmp = Vec::with_capacity(SHARE_SIZE * shares.len());
-    for share in shares.iter() {
+    for share in &shares {
         tmp.extend(share.iter());
     }
 
@@ -379,7 +379,7 @@ pub mod hazmat {
     assert_ne!(restored, key);
     ```
     */
-    pub fn combine_keyshares(keyshares: &Vec<Vec<u8>>) -> SSSResult<Vec<u8>> {
+    pub fn combine_keyshares(keyshares: &[Vec<u8>]) -> SSSResult<Vec<u8>> {
         for (i, keyshare) in keyshares.iter().enumerate() {
             if keyshare.len() != KEYSHARE_SIZE {
                 return Err(SSSError::BadShareLen((i, keyshare.len())));
