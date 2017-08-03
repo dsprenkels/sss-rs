@@ -19,7 +19,7 @@ open the vault when one of the staff members is abroad or sick at home.
 
 ```toml
 [dependencies]
-shamirsecretsharing = { git = "https://github.com/dsprenkels/sss-rs" }
+shamirsecretsharing = "0.1"
 ```
 
 ## Usage
