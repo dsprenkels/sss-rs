@@ -230,14 +230,9 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
         }
     }
 
-    // Dedup the shares
-    let mut shares = Vec::from(shares);
-    shares.sort();
-    shares.dedup();
-
     // Build a slice containing all the shares sequentially
     let mut tmp = Vec::with_capacity(SHARE_SIZE * shares.len());
-    for share in &shares {
+    for share in shares {
         tmp.extend(share.iter());
     }
 
@@ -489,7 +484,17 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_combine_shares_dedup() {
+        // So currently there is the issue that dedup'ing the list of shares creates a side
+        // channel on which shares are used to recreate the secret. I am currently not sure about
+        // the implications of this.
+        //
+        // For example, the scheme may be used in a context where the shareholders are to remain
+        // anonymous. Now the dealer may have given a share to two different people. If it is
+        // known which people hold this share, the side channel will tell the attacker that they
+        // *both* participated in restoring the secret. Thus, participation anonymity is not
+        // guaranteed.
         let mut shares = create_shares(DATA, 5, 4).unwrap();
         let dup = shares[3].clone();
         shares.push(dup);
