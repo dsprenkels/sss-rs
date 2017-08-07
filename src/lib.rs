@@ -1,18 +1,22 @@
 /*!
 This crate provides bindings to my [Shamir secret sharing library][sss].
 
-The main functions to use are `create_shares` and `combine_shares`.
+The main functions to use are [`create_shares`] and [`combine_shares`].
 
-*The `hazmat` module is for experts.* The functions in the `hazmat` module miss some security
+*The [`hazmat`] module is for experts.* The functions in the `hazmat` module miss some security
 guarantees, so do not use them unless you really know what you are doing.
 
-Encapsulated in the `SSSResult`, `combine_shares` will return an `Option<_>` which will be
-`Some(data)` if the data could be restored. If the data could not be restored, `combine_shares`
+Encapsulated in the `SSSResult`, [`combine_shares`] will return an `Option<_>` which will be
+`Some(data)` if the data could be restored. If the data could not be restored, [`combine_shares`]
 will return `Ok(None)`. This means that could mean either of:
 
 1. More shares were needed to reach the treshold.
 2. Shares of different sets (corresponding to different secrets) were supplied or some of the
    shares were tampered with.
+
+[`hazmat`]: hazmat/index.html
+[`create_shares`]: fn.create_shares.html
+[`combine_shares`]: fn.combine_shares.html
 
 # Example
 
@@ -262,11 +266,131 @@ pub mod hazmat {
     Example stuff that you will need to guarantee when using this API (not exhaustive):
 
     - All shared keys are uniformly random.
-    - Keys produced by `combine_keyshares` are kept secret even if they did not manage to restore
+    - Keys produced by [`combine_keyshares`] are kept secret even if they did not manage to restore
       a secret.
     - _You_ will check the integrity of the restored secrets (or integrity is not a requirement).
-    */
 
+    When your security model actually allows you to use the `hazmat` module, it can be a very
+    powerful tool. In the normal API, the library wraps the secret data for the user in an AEAD
+    `crypto_secretbox`. This guarantees the security items above. The `hazmat` module exposes the
+    low level *key-sharing* API which allows you to bypass the AEAD wrapper leaving you with shares
+    that are a lot shorter (useful for sharing bitcoin secret keys). You can also implement you own
+    AEAD wrapper so that you can secret-share arbitrary long streams of data.
+
+    ## Sharing data of arbitrary length
+
+    [`create_shares`](../fn.create_shares.html) only shares buffers of exactly 64 bytes, which is
+    of course quite limiting. However when using the keysharing module you can use an AEAD wrapper
+    and share buffers of arbitrary length. I think an example is in place:
+
+    ```
+    extern crate chacha20_poly1305_aead;
+    extern crate rand;
+    extern crate shamirsecretsharing;
+
+    use chacha20_poly1305_aead::{encrypt, decrypt};
+    use shamirsecretsharing::hazmat::{create_keyshares, combine_keyshares};
+
+    /// Stores an encrypted message with a message authentication tag
+    struct CryptoSecretbox {
+        ciphertext: Vec<u8>,
+        tag: Vec<u8>,
+    }
+
+    /// AEAD encrypt the message with `key`
+    fn aead_wrap(key: &[u8], text: &[u8]) -> CryptoSecretbox {
+        let nonce = vec![0; 12];
+        let mut ciphertext = Vec::with_capacity(text.len());
+        let tag = encrypt(&key, &nonce, &[], text, &mut ciphertext).unwrap().to_vec();
+        CryptoSecretbox { ciphertext: ciphertext, tag: tag }
+    }
+
+    /// AEAD decrypt the message with `key`
+    fn aead_unwrap(key: &[u8], boxed: CryptoSecretbox) -> Vec<u8> {
+        let CryptoSecretbox { ciphertext: ciphertext, tag: tag } = boxed;
+        let nonce = vec![0; 12];
+        let mut text = Vec::with_capacity(ciphertext.len());
+        decrypt(&key, &nonce, &[], &ciphertext, &tag, &mut text).unwrap();
+        text
+    }
+
+    fn main() {
+        let text = b"Snape kills Dumbledore!"; // Secret message
+        let (boxed, keyshares) = {
+            // Generate an ephemeral key
+            let ref key = rand::random::<[u8; 32]>();
+
+            // Encrypt the text using the key
+            let boxed = aead_wrap(key, text);
+
+            // Share the key using `create_keyshares`
+            let keyshares = create_keyshares(key, 2, 2).unwrap();
+
+            (boxed, keyshares)
+        };
+
+        let restored = {
+            // Recover the key using `combine_keyshares`
+            let key = combine_keyshares(&keyshares).unwrap();
+
+            // Decrypt the secret message using the restored key
+            aead_unwrap(&key, boxed)
+        };
+
+        assert_eq!(restored, text);
+    }
+    ```
+
+    ## Sharing differently sized keys
+
+    A keyshare is a string of 33 bytes. The first byte denotes the `x` coordinate in the Shamir
+    secret sharing scheme. This `x`-coordinate can be viewed as the share "tag". The other 32
+    bytes hold the actual data. Each byte of a keyshare corresponds to the same byte in the secret
+    key. They are independent from one another.
+    This makes it possible to share keys that are not necesarrily 32 bytes long, by truncating the
+    shares. For example:
+
+    ```
+    use shamirsecretsharing::hazmat::*;
+
+    fn pad<T: Default>(vec: &mut Vec<T>, desired_len: usize) {
+        while vec.len() < desired_len {
+            vec.push(Default::default());
+        }
+    }
+
+    let mut key = vec![42; 16]; // `key` holds a 128 bit key (16 bytes)
+    pad(&mut key, 32); // pad the key with zeros
+
+    // Split the key into keyshares
+    let mut keyshares = create_keyshares(&key, 3, 3).unwrap();
+
+    // The keyshares are 33 bytes long, only store the first 17 bytes (1 + 16 for x and y's)
+    for mut keyshare in &mut keyshares {
+        keyshare.truncate(17);  // Truncate the last keyshare bytes
+        pad(&mut keyshare, 33); // and put zeros in place
+    }
+
+    // Restore the key
+    let restored = combine_keyshares(&keyshares).unwrap();
+    assert_eq!(restored, key);
+    ```
+    Tthe same trick is possible with keys that are longer than 32 bytes, to secret-share long keys
+    in a streaming manner. But remember that the key must be uniformly random if you do not trust
+    *all* the shareholders (which you probably don't otherwise you would not be using this crate).
+    (In other words: Do not use this to share RSA keys, use an AEAD wrapper instead!)
+
+    You might guess that this approach kills performance by a factor of 2, but this is not really
+    true. Like a block cipher `sss` library performs all cryptographic computations in parrallel
+    with block sizes of 32 bytes. Below 32 bytes we will still have to compute one block, so we
+    cannot gain an additional speedup by secret-sharing less than 32 bytes of key material.
+
+    I agree that with all this truncating and padding the code looks a bit messy, but I do not
+    consider these kinds of tricks really considered mainstream anyway.
+
+    [`create_keyshares`]: fn.create_keyshares.html
+    [`combine_keyshares`]: fn.combine_keyshares.html
+    */
     use libc::uint8_t;
     use super::*;
 
