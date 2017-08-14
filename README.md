@@ -1,6 +1,7 @@
 # Shamir secret sharing in Rust
 
 [![Build Status](https://travis-ci.org/dsprenkels/sss-rs.svg?branch=master)](https://travis-ci.org/dsprenkels/sss-rs)
+[![Coverage Status](https://coveralls.io/repos/github/dsprenkels/sss-rs/badge.svg?branch=master)](https://coveralls.io/github/dsprenkels/sss-rs?branch=master)
 [![Docs](https://docs.rs/shamirsecretsharing/badge.svg)](https://docs.rs/shamirsecretsharing)
 
 `sss-rs` contains Rust bindings for my [Shamir secret sharing library][sss].
