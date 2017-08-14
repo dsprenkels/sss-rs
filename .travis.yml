@@ -16,4 +16,4 @@ addons:
 script:
   - cargo build --target x86_64-unknown-linux-gnu && cargo test --target x86_64-unknown-linux-gnu
 after_success:
-  - ([[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install cargo-kcov; cargo kcov --print-install-kcov-sh | sh; cargo kcov --coveralls -- --verify --exclude-pattern=sss/tweetnacl.c)
+  - ([[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install cargo-kcov; cargo kcov --print-install-kcov-sh | sh; cargo kcov --coveralls -- --verify --exclude-pattern=sss/)
