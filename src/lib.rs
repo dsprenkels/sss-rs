@@ -537,6 +537,14 @@ pub mod hazmat {
         }
 
         #[test]
+        fn test_create_keyshares_err() {
+            assert_eq!(create_keyshares(KEY, 0, 0), Err(SSSError::InvalidN(0)));
+            assert_eq!(create_keyshares(KEY, 5, 0), Err(SSSError::InvalidK(0)));
+            assert_eq!(create_keyshares(KEY, 5, 6), Err(SSSError::InvalidK(6)));
+            assert_eq!(create_keyshares(&[], 5, 3), Err(SSSError::BadInputLen(0)));
+        }
+
+        #[test]
         fn test_combine_keyshares_ok() {
             let mut keyshares = create_keyshares(KEY, 5, 4).unwrap();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
@@ -551,12 +559,19 @@ pub mod hazmat {
             keyshares.pop();
             assert_ne!(combine_keyshares(&keyshares).unwrap(), KEY);
         }
+
+        #[test]
+        fn test_combine_keyshares_err() {
+            let keyshares = vec![vec![]];
+            assert_eq!(combine_keyshares(&keyshares), Err(SSSError::BadShareLen((0, 0))));
+        }
     }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use super::*;
     const DATA: &[u8] = &[42; DATA_SIZE];
 
@@ -583,6 +598,7 @@ mod tests {
         assert_eq!(create_shares(DATA, 0, 0), Err(SSSError::InvalidN(0)));
         assert_eq!(create_shares(DATA, 5, 0), Err(SSSError::InvalidK(0)));
         assert_eq!(create_shares(DATA, 5, 6), Err(SSSError::InvalidK(6)));
+        assert_eq!(create_shares(&[], 5, 3), Err(SSSError::BadInputLen(0)));
     }
 
     #[test]
@@ -608,20 +624,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn test_combine_shares_dedup() {
-        // So currently there is the issue that dedup'ing the list of shares creates a side
-        // channel on which shares are used to recreate the secret. I am currently not sure about
-        // the implications of this.
-        //
-        // For example, the scheme may be used in a context where the shareholders are to remain
-        // anonymous. Now the dealer may have given a share to two different people. If it is
-        // known which people hold this share, the side channel will tell the attacker that they
-        // *both* participated in restoring the secret. Thus, participation anonymity is not
-        // guaranteed.
-        let mut shares = create_shares(DATA, 5, 4).unwrap();
-        let dup = shares[3].clone();
-        shares.push(dup);
-        assert_eq!(combine_shares(&shares).unwrap().unwrap(), DATA);
+    fn test_sss_error_display() {
+        assert_eq!(format!("{}", SSSError::InvalidN(5)), "Error: invalid share count (5)");
+        assert_eq!(format!("{}", SSSError::InvalidK(3)), "Error: invalid treshold (3)");
+        assert_eq!(format!("{}", SSSError::BadShareLen((1, 2))), "Error: share 1 has bad length (2)");
+        assert_eq!(format!("{}", SSSError::BadInputLen(0)), "Error: bad input length (0)");
+    }
+
+    #[test]
+    fn test_sss_error_description() {
+        assert_eq!(SSSError::InvalidN(5).description(), "invalid n");
+        assert_eq!(SSSError::InvalidK(3).description(), "invalid k");
+        assert_eq!(SSSError::BadShareLen((0, 0)).description(), "bad share length");
+        assert_eq!(SSSError::BadInputLen(0).description(), "bad input length");
     }
 }
