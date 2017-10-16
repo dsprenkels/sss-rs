@@ -27,14 +27,14 @@ shamirsecretsharing = "0.1"
 ## Usage
 
 Secrets are always supplied as `&[u8]` slices with a length of 64 items. Shares
-are generated from a piece of secret data using the `sss::create_shares`
-function and shares can be afterwards be combined using `sss::combine_shares`.
+are generated from a piece of secret data using the `create_shares` function and
+shares can be afterwards be combined using `combine_shares`.
 
-Shares are always 113 bytes long. Both `sss::create_shares` and
-`sss::combine_shares` return a `Result<_, SSSError>` type. Errors will _only_
-happen when invalid parameters are supplied. When given valid parameters, these
-function will always return `Ok(_)`. In the case of invalid parameters the
-error will be able to tell you what went wrong.
+Shares are always 113 bytes long. Both `create_shares` and `combine_shares`
+return a `Result<_, SSSError>` type. Errors will _only_ happen when invalid
+parameters are supplied. When given valid parameters, these function will always
+return `Ok(_)`. In the case of invalid parameters the error will be able to tell
+you what went wrong.
 
 ```rust
 use shamirsecretsharing::*;
