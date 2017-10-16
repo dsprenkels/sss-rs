@@ -170,8 +170,8 @@ let count = 5;
 let treshold = 4;
 let shares = create_shares(&data, count, treshold);
 match shares {
- Ok(shares) => println!("Created some shares: {:?}", shares),
- Err(err) => panic!("Oops! Something went wrong: {}", err),
+    Ok(shares) => println!("Created some shares: {:?}", shares),
+    Err(err) => panic!("Oops! Something went wrong: {}", err),
 }
 ```
 */
