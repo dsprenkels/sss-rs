@@ -47,6 +47,8 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 [sss]: https://github.com/dsprenkels/sss
 */
 
+#![warn(missing_docs)]
+
 extern crate libc;
 #[link(name = "sss", kind = "static")]
 
