@@ -565,7 +565,8 @@ pub mod hazmat {
         #[test]
         fn test_combine_keyshares_err() {
             let keyshares = vec![vec![]];
-            assert_eq!(combine_keyshares(&keyshares), Err(SSSError::BadShareLen((0, 0))));
+            assert_eq!(combine_keyshares(&keyshares),
+                       Err(SSSError::BadShareLen((0, 0))));
         }
     }
 }
@@ -627,17 +628,22 @@ mod tests {
 
     #[test]
     fn test_sss_error_display() {
-        assert_eq!(format!("{}", SSSError::InvalidN(5)), "Error: invalid share count (5)");
-        assert_eq!(format!("{}", SSSError::InvalidK(3)), "Error: invalid treshold (3)");
-        assert_eq!(format!("{}", SSSError::BadShareLen((1, 2))), "Error: share 1 has bad length (2)");
-        assert_eq!(format!("{}", SSSError::BadInputLen(0)), "Error: bad input length (0)");
+        assert_eq!(format!("{}", SSSError::InvalidN(5)),
+                   "Error: invalid share count (5)");
+        assert_eq!(format!("{}", SSSError::InvalidK(3)),
+                   "Error: invalid treshold (3)");
+        assert_eq!(format!("{}", SSSError::BadShareLen((1, 2))),
+                   "Error: share 1 has bad length (2)");
+        assert_eq!(format!("{}", SSSError::BadInputLen(0)),
+                   "Error: bad input length (0)");
     }
 
     #[test]
     fn test_sss_error_description() {
         assert_eq!(SSSError::InvalidN(5).description(), "invalid n");
         assert_eq!(SSSError::InvalidK(3).description(), "invalid k");
-        assert_eq!(SSSError::BadShareLen((0, 0)).description(), "bad share length");
+        assert_eq!(SSSError::BadShareLen((0, 0)).description(),
+                   "bad share length");
         assert_eq!(SSSError::BadInputLen(0).description(), "bad input length");
     }
 }
