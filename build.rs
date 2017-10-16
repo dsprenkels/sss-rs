@@ -1,6 +1,8 @@
-extern crate gcc;
+extern crate cc;
 
 fn main() {
     let sources = ["sss/sss.c", "sss/hazmat.c", "sss/randombytes.c", "sss/tweetnacl.c"];
-    gcc::compile_library("libsss.a", &sources);
+    cc::Build::new()
+        .files(sources.iter())
+        .compile("libsss.a");
 }
