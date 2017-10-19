@@ -18,7 +18,7 @@ addons:
     sources:
       - kalakris-cmake
 script:
-  - cargo build --target x86_64-unknown-linux-gnu && cargo test --target x86_64-unknown-linux-gnu
-  - (! rustc --version | grep -q nightly) || cargo bench --target x86_64-unknown-linux-gnu
+  - cargo build -v && cargo test -v
+  - (! rustc --version | grep -q nightly) || cargo bench -v
 after_success:
-  - ([[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install --force cargo-travis; cargo coveralls --exclude-pattern=sss/)
+  - ([[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install -v --force cargo-travis; cargo coveralls -v --exclude-pattern=sss/)
