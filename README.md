@@ -68,7 +68,8 @@ assert_eq!(restored2, None);
 
 ## Questions
 
-Feel free to send me an email on my Github associated e-mail address.
+Feel free to [open an issue](https://github.com/dsprenkels/sss-rs/issues/new)
+or send me an email on my Github associated e-mail address.
 
 
 [randombytes]: https://github.com/dsprenkels/randombytes
