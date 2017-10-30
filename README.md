@@ -7,7 +7,7 @@
 `sss-rs` contains Rust bindings for my [Shamir secret sharing library][sss].
 This library allows users to split secret data into a number of different
 shares. With the possession of some or all of these shares, the original secret
-can be restored.
+can be restored. ([Looking for the command line interface?][cli])
 
 An example use case is a beer brewery which has a vault which contains their
 precious super secret recipe. The 5 board members of this brewery do not trust
@@ -68,8 +68,9 @@ assert_eq!(restored2, None);
 
 ## Questions
 
-Feel free to send me an email on my Github associated e-mail address.
+Feel free to [open an issue](https://github.com/dsprenkels/sss-rs/issues/new)
+or send me an email on my Github associated e-mail address.
 
 
-[randombytes]: https://github.com/dsprenkels/randombytes
 [sss]: https://github.com/dsprenkels/sss
+[cli]: https://github.com/dsprenkels/sss-cli
