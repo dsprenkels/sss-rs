@@ -259,7 +259,7 @@ pub mod hazmat {
     Hazardous materials (key-sharing)
 
     This is the `hazmat` module. This stands for **hazardous materials**. This module is only to
-    be used for experts, because it does not have all the straightforward guarantees that the
+    be used by experts, because it does not have all the straightforward guarantees that the
     normal API has. E.g. where the [normal API](../index.html) prevents tampering with the shares,
     this API does not do any integrity checks, etc. Only use this module when you are really sure
     that Shamir secret sharing is secure in your use case! _If you are not sure about this, you
@@ -377,7 +377,7 @@ pub mod hazmat {
     let restored = combine_keyshares(&keyshares).unwrap();
     assert_eq!(restored, key);
     ```
-    Tthe same trick is possible with keys that are longer than 32 bytes, to secret-share long keys
+    The same trick is possible with keys that are longer than 32 bytes, to secret-share long keys
     in a streaming manner. But remember that the key must be uniformly random if you do not trust
     *all* the shareholders (which you probably don't otherwise you would not be using this crate).
     (In other words: Do not use this to share RSA keys, use an AEAD wrapper instead!)
