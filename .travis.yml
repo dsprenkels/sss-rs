@@ -3,7 +3,7 @@ rust:
   - stable
   - beta
   - nightly
-  - 1.17.0 # minimum supported version
+  - 1.21.0 # minimum supported version
 env:
   - CC=gcc
   - CC=clang
