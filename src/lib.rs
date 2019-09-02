@@ -52,7 +52,7 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 extern crate libc;
 #[link(name = "sss", kind = "static")]
 
-use libc::{uint8_t, c_int};
+use libc::c_int;
 use std::error;
 use std::fmt;
 
@@ -106,8 +106,8 @@ type SSSResult<T> = Result<T, SSSError>;
 
 
 extern "C" {
-    fn sss_create_shares(out: *mut uint8_t, data: *const uint8_t, n: uint8_t, k: uint8_t);
-    fn sss_combine_shares(data: *mut uint8_t, shares: *const uint8_t, k: uint8_t) -> c_int;
+    fn sss_create_shares(out: *mut u8, data: *const u8, n: u8, k: u8);
+    fn sss_combine_shares(data: *mut u8, shares: *const u8, k: u8) -> c_int;
 }
 
 
@@ -136,7 +136,7 @@ fn check_data_len(data: &[u8]) -> SSSResult<()> {
 /// Return a closure which groups elements into a new Vec `acc` in-place
 ///
 /// This function is to be used in combination with `fold`. See `tests::group` for an example.
-fn group<T>(group_size: usize) -> Box<Fn(Vec<Vec<T>>, T) -> Vec<Vec<T>>> {
+fn group<T>(group_size: usize) -> Box<dyn Fn(Vec<Vec<T>>, T) -> Vec<Vec<T>>> {
     Box::new(move |mut acc, x| {
         if acc.last().map_or(false, |x| x.len() < group_size) {
             acc.last_mut().unwrap().push(x);
@@ -245,7 +245,7 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
     // Combine the shares
     let mut data = vec![0; DATA_SIZE];
     let ret =
-        unsafe { sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as uint8_t) };
+        unsafe { sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as u8) };
 
     match ret {
         0 => Ok(Some(data)),
@@ -393,12 +393,11 @@ pub mod hazmat {
     [`create_keyshares`]: fn.create_keyshares.html
     [`combine_keyshares`]: fn.combine_keyshares.html
     */
-    use libc::uint8_t;
     use super::*;
 
     extern "C" {
-        fn sss_create_keyshares(out: *mut uint8_t, key: *const uint8_t, n: uint8_t, k: uint8_t);
-        fn sss_combine_keyshares(key: *mut uint8_t, shares: *const uint8_t, k: uint8_t);
+        fn sss_create_keyshares(out: *mut u8, key: *const u8, n: u8, k: u8);
+        fn sss_combine_keyshares(key: *mut u8, shares: *const u8, k: u8);
     }
 
     /// The size of the input data to `create_keyshares`
@@ -518,7 +517,7 @@ pub mod hazmat {
         unsafe {
             sss_combine_keyshares(key.as_mut_ptr(),
                                   tmp.as_mut_ptr(),
-                                  keyshares.len() as uint8_t);
+                                  keyshares.len() as u8);
         };
 
         Ok(key)
