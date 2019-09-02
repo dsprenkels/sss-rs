@@ -1,6 +1,6 @@
 [package]
 name = "shamirsecretsharing"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Daan Sprenkels <hello@dsprenkels.com>"]
 description = "Shamir secret sharing library for Rust"
 license = "MIT"
