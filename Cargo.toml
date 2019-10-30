@@ -6,6 +6,9 @@ description = "Shamir secret sharing library for Rust"
 license = "MIT"
 repository = "https://github.com/dsprenkels/sss-rs"
 
+[features]
+have_libsodium = []
+
 [dependencies]
 libc = "0.2.0"
 
