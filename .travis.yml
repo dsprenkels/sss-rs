@@ -1,4 +1,7 @@
 language: rust
+arch:
+  - amd64
+  - arm64
 rust:
   - stable
   - beta
@@ -15,10 +18,8 @@ addons:
       - libdw-dev
       - binutils-dev
       - cmake
-    sources:
-      - kalakris-cmake
 script:
   - cargo build -v && cargo test -v
   - (! rustc --version | grep -q nightly) || cargo bench -v
 after_success:
-  - ([[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install -v --force cargo-travis; cargo coveralls -v --exclude-pattern=sss/)
+  - ([[ "$(uname -m)" == "x86_64" ]] && [[ $CC == "gcc" ]] && rustc --version | grep -q nightly) && (cargo install -v --force cargo-travis; cargo coveralls -v --exclude-pattern=sss/)
