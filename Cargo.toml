@@ -5,6 +5,11 @@ authors = ["Daan Sprenkels <daan@dsprenkels.com>"]
 description = "Shamir secret sharing library for Rust"
 license = "MIT"
 repository = "https://github.com/dsprenkels/sss-rs"
+categories = ["cryptography"]
+
+[badges]
+travis-ci = { repository = "dsprenkels/sss-rs", branch = "master" }
+maintenance = { status = "passively-maintained" }
 
 [features]
 have_libsodium = []
