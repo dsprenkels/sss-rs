@@ -51,7 +51,6 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 
 extern crate libc;
 #[link(name = "sss", kind = "static")]
-
 use libc::c_int;
 use std::error;
 use std::fmt;
@@ -69,12 +68,10 @@ pub enum SSSError {
     BadInputLen(usize),
 }
 
-
 /// The size of the input data to `create_shares`
 pub const DATA_SIZE: usize = 64;
 /// Regular share size from shares produced by `create_shares`
 pub const SHARE_SIZE: usize = 113;
-
 
 impl fmt::Display for SSSError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -104,12 +101,10 @@ impl error::Error for SSSError {
 
 type SSSResult<T> = Result<T, SSSError>;
 
-
 extern "C" {
     fn sss_create_shares(out: *mut u8, data: *const u8, n: u8, k: u8);
     fn sss_combine_shares(data: *mut u8, shares: *const u8, k: u8) -> c_int;
 }
-
 
 /// Check the parameters `n` and `k` and return `Ok(())` if they were valid
 fn check_nk(n: u8, k: u8) -> SSSResult<()> {
@@ -132,7 +127,6 @@ fn check_data_len(data: &[u8]) -> SSSResult<()> {
     }
 }
 
-
 /// Return a closure which groups elements into a new Vec `acc` in-place
 ///
 /// This function is to be used in combination with `fold`. See `tests::group` for an example.
@@ -148,7 +142,6 @@ fn group<T>(group_size: usize) -> Box<dyn Fn(Vec<Vec<T>>, T) -> Vec<Vec<T>>> {
         acc
     })
 }
-
 
 /**
 Create a set of shares
@@ -186,10 +179,10 @@ pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
     }
 
     // Put each share in a separate Vec
-    Ok(tmp.into_iter()
-           .fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
+    Ok(tmp
+        .into_iter()
+        .fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
 }
-
 
 /**
 Combine a set of shares and return the original secret
@@ -252,7 +245,6 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
         _ => Ok(None),
     }
 }
-
 
 pub mod hazmat {
     /*!
@@ -454,10 +446,10 @@ pub mod hazmat {
         }
 
         // Put each share in a separate Vec
-        Ok(tmp.into_iter()
-               .fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
+        Ok(tmp
+            .into_iter()
+            .fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
     }
-
 
     /**
     Combine a set of key shares and return the original key
@@ -515,9 +507,7 @@ pub mod hazmat {
         // Combine the keyshares
         let mut key = vec![0; KEY_SIZE];
         unsafe {
-            sss_combine_keyshares(key.as_mut_ptr(),
-                                  tmp.as_mut_ptr(),
-                                  keyshares.len() as u8);
+            sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as u8);
         };
 
         Ok(key)
@@ -533,7 +523,7 @@ pub mod hazmat {
             let keyshares = create_keyshares(KEY, 5, 4).unwrap();
             assert_eq!(keyshares.len(), 5);
             for keyshare in keyshares {
-                assert_eq!(keyshare.len(), KEYSHARE_SIZE);;
+                assert_eq!(keyshare.len(), KEYSHARE_SIZE);
             }
         }
 
@@ -564,23 +554,28 @@ pub mod hazmat {
         #[test]
         fn test_combine_keyshares_err() {
             let keyshares = vec![vec![]];
-            assert_eq!(combine_keyshares(&keyshares),
-                       Err(SSSError::BadShareLen((0, 0))));
+            assert_eq!(
+                combine_keyshares(&keyshares),
+                Err(SSSError::BadShareLen((0, 0)))
+            );
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use super::*;
+    use std::error::Error;
     const DATA: &[u8] = &[42; DATA_SIZE];
 
     #[test]
     fn test_group() {
         let dna = vec!['C', 'T', 'G', 'G', 'A', 'A', 'C', 'A', 'G'];
-        let expected = vec![vec!['C', 'T', 'G'], vec!['G', 'A', 'A'], vec!['C', 'A', 'G']];
+        let expected = vec![
+            vec!['C', 'T', 'G'],
+            vec!['G', 'A', 'A'],
+            vec!['C', 'A', 'G'],
+        ];
 
         let triplets = dna.into_iter().fold(Vec::new(), &*group(3));
         assert_eq!(triplets, expected);
@@ -627,22 +622,32 @@ mod tests {
 
     #[test]
     fn test_sss_error_display() {
-        assert_eq!(format!("{}", SSSError::InvalidN(5)),
-                   "Error: invalid share count (5)");
-        assert_eq!(format!("{}", SSSError::InvalidK(3)),
-                   "Error: invalid treshold (3)");
-        assert_eq!(format!("{}", SSSError::BadShareLen((1, 2))),
-                   "Error: share 1 has bad length (2)");
-        assert_eq!(format!("{}", SSSError::BadInputLen(0)),
-                   "Error: bad input length (0)");
+        assert_eq!(
+            format!("{}", SSSError::InvalidN(5)),
+            "Error: invalid share count (5)"
+        );
+        assert_eq!(
+            format!("{}", SSSError::InvalidK(3)),
+            "Error: invalid treshold (3)"
+        );
+        assert_eq!(
+            format!("{}", SSSError::BadShareLen((1, 2))),
+            "Error: share 1 has bad length (2)"
+        );
+        assert_eq!(
+            format!("{}", SSSError::BadInputLen(0)),
+            "Error: bad input length (0)"
+        );
     }
 
     #[test]
     fn test_sss_error_description() {
         assert_eq!(SSSError::InvalidN(5).description(), "invalid n");
         assert_eq!(SSSError::InvalidK(3).description(), "invalid k");
-        assert_eq!(SSSError::BadShareLen((0, 0)).description(),
-                   "bad share length");
+        assert_eq!(
+            SSSError::BadShareLen((0, 0)).description(),
+            "bad share length"
+        );
         assert_eq!(SSSError::BadInputLen(0).description(), "bad input length");
     }
 }
