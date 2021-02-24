@@ -176,8 +176,8 @@ match shares {
 ```
 */
 pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
-    try!(check_nk(n, k));
-    try!(check_data_len(data));
+    check_nk(n, k)?;
+    check_data_len(data)?;
 
     // Restore the shares into one buffer
     let mut tmp = vec![0; SHARE_SIZE * (n as usize)];
@@ -444,8 +444,8 @@ pub mod hazmat {
     ```
     */
     pub fn create_keyshares(key: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
-        try!(check_nk(n, k));
-        try!(check_key_len(key));
+        check_nk(n, k)?;
+        check_key_len(key)?;
 
         // Restore the keyshares into one buffer
         let mut tmp = vec![0; KEYSHARE_SIZE * (n as usize)];
