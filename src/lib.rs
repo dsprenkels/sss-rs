@@ -641,6 +641,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_sss_error_description() {
         assert_eq!(SSSError::InvalidN(5).description(), "invalid n");
         assert_eq!(SSSError::InvalidK(3).description(), "invalid k");
