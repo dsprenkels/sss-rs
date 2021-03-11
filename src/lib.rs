@@ -50,6 +50,7 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 #![warn(missing_docs)]
 
 extern crate libc;
+extern crate rand;
 #[link(name = "sss", kind = "static")]
 use libc::c_int;
 use std::error;
@@ -353,8 +354,9 @@ pub mod hazmat {
         }
     }
 
-    let mut key = vec![42; 16]; // `key` holds a 128 bit key (16 bytes)
-    pad(&mut key, 32); // pad the key with zeros
+    let short_key = [42; 16]; // `key` holds a 128 bit key (16 bytes)
+    let mut key = [0; KEY_SIZE];
+    &mut key[..16].copy_from_slice(&short_key);
 
     // Split the key into keyshares
     let mut keyshares = create_keyshares(&key, 3, 3).unwrap();
@@ -385,10 +387,10 @@ pub mod hazmat {
     [`create_keyshares`]: fn.create_keyshares.html
     [`combine_keyshares`]: fn.combine_keyshares.html
     */
+
     use super::*;
 
     extern "C" {
-        fn sss_create_keyshares(out: *mut u8, key: *const u8, n: u8, k: u8);
         fn sss_combine_keyshares(key: *mut u8, shares: *const u8, k: u8);
     }
 
@@ -422,7 +424,7 @@ pub mod hazmat {
     ```
     use shamirsecretsharing::hazmat::*;
 
-    # let key = vec![42; KEY_SIZE];
+    # let key = [42; KEY_SIZE];
     // With a `key` vector containing a uniform key
 
     // Create a some key shares of the secret key
@@ -439,16 +441,42 @@ pub mod hazmat {
         check_nk(n, k)?;
         check_key_len(key)?;
 
+        let mut key_arr = [0; KEY_SIZE];
+        key_arr.copy_from_slice(key);
+
         // Restore the keyshares into one buffer
-        let mut tmp = vec![0; KEYSHARE_SIZE * (n as usize)];
-        unsafe {
-            sss_create_keyshares(tmp.as_mut_ptr(), key.as_ptr(), n, k);
+        let mut keyshares = Vec::with_capacity(n.into());
+
+        // Put the secret in the bottom part of the polynomial
+        let poly0 = gf256::bitslice(&key_arr);
+
+        // Randomly generate the other terms in the polynomial
+        let mut poly = vec![gf256::Poly::default(); (k - 1).into()];
+        for coeff in poly.iter_mut() {
+            *coeff = rand::random();
         }
 
-        // Put each share in a separate Vec
-        Ok(tmp
-            .into_iter()
-            .fold(Vec::with_capacity(n as usize), &*group(KEYSHARE_SIZE)))
+        for share_idx in 0..n {
+            // x value is in 1..n
+            let unbitsliced_x = share_idx + 1;
+            let x = gf256::splat(unbitsliced_x);
+
+            // Calculate y
+            let mut y = poly0;
+            let mut xpow = gf256::Poly::default();
+            xpow[0] = !0;
+            for coeff_idx in 0..(k - 1).into() {
+                xpow = gf256::mul(&xpow, &x);
+                let tmp = gf256::mul(&xpow, &poly[coeff_idx]);
+                y = gf256::add(&y, &tmp);
+            }
+            let y_unbitsliced = gf256::unbitslice(&y);
+            let mut keyshare = vec![0; KEYSHARE_SIZE];
+            keyshare[0] = unbitsliced_x;
+            keyshare[1..].copy_from_slice(&y_unbitsliced);
+            keyshares.push(keyshare);
+        }
+        Ok(keyshares)
     }
 
     /**
@@ -478,7 +506,7 @@ pub mod hazmat {
     ```rust
     use shamirsecretsharing::hazmat::*;
 
-    # let mut key = vec![42; KEY_SIZE];
+    # let mut key = [42; KEY_SIZE];
     # let mut keyshares = create_keyshares(&key, 3, 3).unwrap();
     // When `keyshares` contains a set of valid shares for `key`
     let restored = combine_keyshares(&keyshares).unwrap();
@@ -516,11 +544,11 @@ pub mod hazmat {
     #[cfg(test)]
     mod tests {
         use super::*;
-        const KEY: &[u8] = &[42; KEY_SIZE];
+        const KEY: [u8; KEY_SIZE] = [42; KEY_SIZE];
 
         #[test]
         fn test_create_keyshares_ok() {
-            let keyshares = create_keyshares(KEY, 5, 4).unwrap();
+            let keyshares = create_keyshares(&KEY, 5, 4).unwrap();
             assert_eq!(keyshares.len(), 5);
             for keyshare in keyshares {
                 assert_eq!(keyshare.len(), KEYSHARE_SIZE);
@@ -529,15 +557,16 @@ pub mod hazmat {
 
         #[test]
         fn test_create_keyshares_err() {
-            assert_eq!(create_keyshares(KEY, 0, 0), Err(SSSError::InvalidN(0)));
-            assert_eq!(create_keyshares(KEY, 5, 0), Err(SSSError::InvalidK(0)));
-            assert_eq!(create_keyshares(KEY, 5, 6), Err(SSSError::InvalidK(6)));
+            assert_eq!(create_keyshares(&KEY, 0, 0), Err(SSSError::InvalidN(0)));
+            assert_eq!(create_keyshares(&KEY, 5, 0), Err(SSSError::InvalidK(0)));
+            assert_eq!(create_keyshares(&KEY, 5, 6), Err(SSSError::InvalidK(6)));
             assert_eq!(create_keyshares(&[], 5, 3), Err(SSSError::BadInputLen(0)));
         }
 
         #[test]
         fn test_combine_keyshares_ok() {
-            let mut keyshares = create_keyshares(KEY, 5, 4).unwrap();
+            let mut keyshares = create_keyshares(&KEY, 5, 4).unwrap();
+            dbg!(&keyshares);
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
@@ -559,6 +588,221 @@ pub mod hazmat {
                 Err(SSSError::BadShareLen((0, 0)))
             );
         }
+    }
+}
+
+mod gf256 {
+    pub type Poly = [u32; 8];
+
+    pub fn bitslice(x: &[u8; 32]) -> Poly {
+        let mut r = [0u32; 8];
+        for (arr_idx, cur) in x.iter().enumerate() {
+            for bit_idx in 0..8 {
+                r[bit_idx] |= ((*cur as u32 >> bit_idx) & 1) << arr_idx;
+            }
+        }
+        r
+    }
+
+    pub fn unbitslice(x: &Poly) -> [u8; 32] {
+        let mut r = [0; 32];
+        for bit_idx in 0..8 {
+            let cur = x[bit_idx] as u32;
+            for (arr_idx, b) in r.iter_mut().enumerate() {
+                *b |= (((cur >> arr_idx) & 1) as u8) << bit_idx;
+            }
+        }
+        r
+    }
+
+    pub fn splat(x: u8) -> Poly {
+        let mut r = Poly::default();
+        for (idx, cur) in r.iter_mut().enumerate() {
+            *cur = ((x as u32 & (1 << idx)) << (31 - idx)) >> 31;
+        }
+        r
+    }
+
+    /// Add (XOR) `r` with `x` and store the result in `r`.
+    pub fn add(x1: &Poly, x2: &Poly) -> Poly {
+        let mut r = *x1;
+        let iter = Iterator::zip(r.iter_mut(), x2.iter());
+        for (acc, rhs) in iter {
+            *acc ^= *rhs;
+        }
+        r
+    }
+
+    /// Safely multiply two bitsliced polynomials in GF(2^8) reduced by
+    /// x^8 + x^4 + x^3 + x + 1. If you need to square a polynomial
+    /// use `gf256::square` instead.
+    pub fn mul(a: &Poly, b: &Poly) -> Poly {
+        // This function implements Russian Peasant multiplication on two
+        // bitsliced polynomials.
+        //
+        // I personally think that these kinds of long lists of operations
+        // are often a bit ugly. A double for loop would be nicer and would
+        // take up a lot less lines of code.
+        // However, some compilers seem to fail in optimizing these kinds of
+        // loops. So we will just have to do this by hand.
+        //
+        let mut a = *a;
+        let mut r = [0; 8];
+
+        r[0] = a[0] & b[0]; // add (assignment, because r is 0)
+        r[1] = a[1] & b[0];
+        r[2] = a[2] & b[0];
+        r[3] = a[3] & b[0];
+        r[4] = a[4] & b[0];
+        r[5] = a[5] & b[0];
+        r[6] = a[6] & b[0];
+        r[7] = a[7] & b[0];
+        a[0] ^= a[7]; // reduce
+        a[2] ^= a[7];
+        a[3] ^= a[7];
+
+        r[0] ^= a[7] & b[1]; // add
+        r[1] ^= a[0] & b[1];
+        r[2] ^= a[1] & b[1];
+        r[3] ^= a[2] & b[1];
+        r[4] ^= a[3] & b[1];
+        r[5] ^= a[4] & b[1];
+        r[6] ^= a[5] & b[1];
+        r[7] ^= a[6] & b[1];
+        a[7] ^= a[6]; // reduce
+        a[1] ^= a[6];
+        a[2] ^= a[6];
+
+        r[0] ^= a[6] & b[2]; // add
+        r[1] ^= a[7] & b[2];
+        r[2] ^= a[0] & b[2];
+        r[3] ^= a[1] & b[2];
+        r[4] ^= a[2] & b[2];
+        r[5] ^= a[3] & b[2];
+        r[6] ^= a[4] & b[2];
+        r[7] ^= a[5] & b[2];
+        a[6] ^= a[5]; // reduce
+        a[0] ^= a[5];
+        a[1] ^= a[5];
+
+        r[0] ^= a[5] & b[3]; // add
+        r[1] ^= a[6] & b[3];
+        r[2] ^= a[7] & b[3];
+        r[3] ^= a[0] & b[3];
+        r[4] ^= a[1] & b[3];
+        r[5] ^= a[2] & b[3];
+        r[6] ^= a[3] & b[3];
+        r[7] ^= a[4] & b[3];
+        a[5] ^= a[4]; // reduce
+        a[7] ^= a[4];
+        a[0] ^= a[4];
+
+        r[0] ^= a[4] & b[4]; // add
+        r[1] ^= a[5] & b[4];
+        r[2] ^= a[6] & b[4];
+        r[3] ^= a[7] & b[4];
+        r[4] ^= a[0] & b[4];
+        r[5] ^= a[1] & b[4];
+        r[6] ^= a[2] & b[4];
+        r[7] ^= a[3] & b[4];
+        a[4] ^= a[3]; // reduce
+        a[6] ^= a[3];
+        a[7] ^= a[3];
+
+        r[0] ^= a[3] & b[5]; // add
+        r[1] ^= a[4] & b[5];
+        r[2] ^= a[5] & b[5];
+        r[3] ^= a[6] & b[5];
+        r[4] ^= a[7] & b[5];
+        r[5] ^= a[0] & b[5];
+        r[6] ^= a[1] & b[5];
+        r[7] ^= a[2] & b[5];
+        a[3] ^= a[2]; // reduce
+        a[5] ^= a[2];
+        a[6] ^= a[2];
+
+        r[0] ^= a[2] & b[6]; // add
+        r[1] ^= a[3] & b[6];
+        r[2] ^= a[4] & b[6];
+        r[3] ^= a[5] & b[6];
+        r[4] ^= a[6] & b[6];
+        r[5] ^= a[7] & b[6];
+        r[6] ^= a[0] & b[6];
+        r[7] ^= a[1] & b[6];
+        a[2] ^= a[1]; // reduce
+        a[4] ^= a[1];
+        a[5] ^= a[1];
+
+        r[0] ^= a[1] & b[7]; // add
+        r[1] ^= a[2] & b[7];
+        r[2] ^= a[3] & b[7];
+        r[3] ^= a[4] & b[7];
+        r[4] ^= a[5] & b[7];
+        r[5] ^= a[6] & b[7];
+        r[6] ^= a[7] & b[7];
+        r[7] ^= a[0] & b[7];
+
+        r
+    }
+
+    /// Square `x` in GF(2^8) and write the result to `r`.
+    pub fn square(x: &Poly) -> Poly {
+        let mut r = [0; 8];
+        let r14;
+        let r12;
+        let mut r10;
+        let mut r8;
+
+        // Use the Freshman's Dream rule to square the polynomial.
+        r14 = x[7];
+        r12 = x[6];
+        r10 = x[5];
+        r8 = x[4];
+        r[6] = x[3];
+        r[4] = x[2];
+        r[2] = x[1];
+        r[0] = x[0];
+
+        // Reduce with  x^8 + x^4 + x^3 + x + 1 until order is less than 8
+        r[7] = r14; // r[7] was 0
+        r[6] ^= r14;
+        r10 ^= r14;
+        // Skip, because r13 is always 0
+        r[4] ^= r12;
+        r[5] = r12; // r[5] was 0
+        r[7] ^= r12;
+        r8 ^= r12;
+        // Skip, because r11 is always 0
+        r[2] ^= r10;
+        r[3] = r10; // r[3] was 0
+        r[5] ^= r10;
+        r[6] ^= r10;
+        r[1] = r14; // r[1] was 0
+        r[2] ^= r14; // Substitute r9 by r14 because they will always be equa
+        r[4] ^= r14;
+        r[5] ^= r14;
+        r[0] ^= r8;
+        r[1] ^= r8;
+        r[3] ^= r8;
+        r[4] ^= r8;
+
+        r
+    }
+
+    /// Invert `x` in GF(2^8) and write the result to `r`
+    pub fn inv(x: Poly) -> Poly {
+        let v1 = square(&x); // v1 = x^2
+        let v2 = square(&v1); // v2 = x^4
+        let v3 = square(&v2); // v3 = x^8
+        let v4 = mul(&v3, &x); // v4 = x^9
+        let v5 = square(&v3); // v5 = x^16
+        let v6 = mul(&v5, &v4); // v6 = x^25
+        let v7 = square(&v6); // v7 = x^50
+        let v8 = square(&v7); // v8 = x^100
+        let v9 = square(&v8); // v9 = x^200
+        let v10 = mul(&v7, &v9); // v10 = x^250
+        let v11 = mul(&v10, &v2); // v11 = x^254
+        v11
     }
 }
 
