@@ -390,10 +390,6 @@ pub mod hazmat {
 
     use super::*;
 
-    extern "C" {
-        fn sss_combine_keyshares(key: *mut u8, shares: *const u8, k: u8);
-    }
-
     /// The size of the input data to `create_keyshares`
     pub const KEY_SIZE: usize = 32;
 
@@ -463,8 +459,7 @@ pub mod hazmat {
 
             // Calculate y
             let mut y = poly0;
-            let mut xpow = gf256::Poly::default();
-            xpow[0] = !0;
+            let mut xpow = gf256::splat(1);
             for coeff_idx in 0..(k - 1).into() {
                 xpow = gf256::mul(&xpow, &x);
                 let tmp = gf256::mul(&xpow, &poly[coeff_idx]);
@@ -526,19 +521,36 @@ pub mod hazmat {
             }
         }
 
-        // Build a slice containing all the keyshares sequentially
-        let mut tmp = Vec::with_capacity(KEYSHARE_SIZE * keyshares.len());
-        for keyshare in keyshares {
-            tmp.extend(keyshare.iter());
+        // Collect the x and y values.
+        let k = keyshares.len();
+        let mut xs = Vec::with_capacity(k);
+        let mut ys = Vec::with_capacity(k);
+        for keyshare in keyshares.iter() {
+            xs.push(gf256::splat(keyshare[0]));
+            let mut y_arr = [0; 32];
+            y_arr.copy_from_slice(&keyshare[1..]);
+            ys.push(gf256::bitslice(&y_arr));
         }
 
-        // Combine the keyshares
-        let mut key = vec![0; KEY_SIZE];
-        unsafe {
-            sss_combine_keyshares(key.as_mut_ptr(), tmp.as_mut_ptr(), keyshares.len() as u8);
-        };
-
-        Ok(key)
+        let mut secret = gf256::Poly::default();
+        for (idx1, (x1, y)) in Iterator::zip(xs.iter(), ys.iter()).enumerate() {
+            let mut num = gf256::splat(1);
+            let mut denom = gf256::splat(1);
+            for (idx2, x2) in xs.iter().enumerate() {
+                if idx1 == idx2 {
+                    continue;
+                }
+                num = gf256::mul(&num, x2);
+                let tmp = gf256::add(x1, x2);
+                denom = gf256::mul(&denom, &tmp);
+            }
+            let denom_inv = gf256::inv(denom); // Inverted denominator
+            let basis = gf256::mul(&num, &denom_inv); // Basis polynomial
+            let scaled_coeff = gf256::mul(&basis, y);
+            secret = gf256::add(&secret, &scaled_coeff);
+        }
+        let key = gf256::unbitslice(&secret);
+        Ok(key.into())
     }
 
     #[cfg(test)]
@@ -566,7 +578,6 @@ pub mod hazmat {
         #[test]
         fn test_combine_keyshares_ok() {
             let mut keyshares = create_keyshares(&KEY, 5, 4).unwrap();
-            dbg!(&keyshares);
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
             keyshares.pop();
             assert_eq!(combine_keyshares(&keyshares).unwrap(), KEY);
@@ -594,6 +605,7 @@ pub mod hazmat {
 mod gf256 {
     pub type Poly = [u32; 8];
 
+    #[must_use]
     pub fn bitslice(x: &[u8; 32]) -> Poly {
         let mut r = [0u32; 8];
         for (arr_idx, cur) in x.iter().enumerate() {
@@ -604,6 +616,7 @@ mod gf256 {
         r
     }
 
+    #[must_use]
     pub fn unbitslice(x: &Poly) -> [u8; 32] {
         let mut r = [0; 32];
         for bit_idx in 0..8 {
@@ -615,15 +628,19 @@ mod gf256 {
         r
     }
 
+    #[must_use]
     pub fn splat(x: u8) -> Poly {
         let mut r = Poly::default();
         for (idx, cur) in r.iter_mut().enumerate() {
-            *cur = ((x as u32 & (1 << idx)) << (31 - idx)) >> 31;
+            let bit = u32::from(x) >> idx & 0x1;
+            let (expand, _) = 0_i32.overflowing_sub(bit as i32);
+            *cur = expand as u32;
         }
         r
     }
 
     /// Add (XOR) `r` with `x` and store the result in `r`.
+    #[must_use]
     pub fn add(x1: &Poly, x2: &Poly) -> Poly {
         let mut r = *x1;
         let iter = Iterator::zip(r.iter_mut(), x2.iter());
@@ -636,6 +653,7 @@ mod gf256 {
     /// Safely multiply two bitsliced polynomials in GF(2^8) reduced by
     /// x^8 + x^4 + x^3 + x + 1. If you need to square a polynomial
     /// use `gf256::square` instead.
+    #[must_use]
     pub fn mul(a: &Poly, b: &Poly) -> Poly {
         // This function implements Russian Peasant multiplication on two
         // bitsliced polynomials.
@@ -746,6 +764,7 @@ mod gf256 {
     }
 
     /// Square `x` in GF(2^8) and write the result to `r`.
+    #[must_use]
     pub fn square(x: &Poly) -> Poly {
         let mut r = [0; 8];
         let r14;
@@ -790,6 +809,7 @@ mod gf256 {
     }
 
     /// Invert `x` in GF(2^8) and write the result to `r`
+    #[must_use]
     pub fn inv(x: Poly) -> Poly {
         let v1 = square(&x); // v1 = x^2
         let v2 = square(&v1); // v2 = x^4
@@ -894,5 +914,12 @@ mod tests {
             "bad share length"
         );
         assert_eq!(SSSError::BadInputLen(0).description(), "bad input length");
+    }
+
+    #[test]
+    fn test_splat() {
+        let expected = [!0, 0, 0, 0, 0, 0, 0, 0];
+        let actual = gf256::splat(1);
+        assert_eq!(actual, expected);
     }
 }
