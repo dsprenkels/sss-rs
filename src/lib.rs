@@ -49,19 +49,23 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 
 #![warn(missing_docs)]
 
-extern crate libc;
 extern crate rand;
+extern crate xsalsa20poly1305;
+use hazmat::{KEYSHARE_SIZE, KEY_SIZE};
 #[link(name = "sss", kind = "static")]
-use libc::c_int;
 use std::error;
 use std::fmt;
+use xsalsa20poly1305::{
+    aead::{AeadMut, NewAead},
+    XSalsa20Poly1305, NONCE_SIZE,
+};
 
 /// Custom error types for errors originating from this crate
 #[derive(Debug, PartialEq, Eq)]
 pub enum SSSError {
     /// The `n` parameter was invalid
     InvalidN(u8),
-    /// The `n` parameter was invalid
+    /// The `k` parameter was invalid
     InvalidK(u8),
     /// There was a (key)share that had an invalid length
     BadShareLen((usize, usize)),
@@ -102,11 +106,6 @@ impl error::Error for SSSError {
 
 type SSSResult<T> = Result<T, SSSError>;
 
-extern "C" {
-    fn sss_create_shares(out: *mut u8, data: *const u8, n: u8, k: u8);
-    fn sss_combine_shares(data: *mut u8, shares: *const u8, k: u8) -> c_int;
-}
-
 /// Check the parameters `n` and `k` and return `Ok(())` if they were valid
 fn check_nk(n: u8, k: u8) -> SSSResult<()> {
     if n < 1 {
@@ -126,22 +125,6 @@ fn check_data_len(data: &[u8]) -> SSSResult<()> {
     } else {
         Ok(())
     }
-}
-
-/// Return a closure which groups elements into a new Vec `acc` in-place
-///
-/// This function is to be used in combination with `fold`. See `tests::group` for an example.
-fn group<T>(group_size: usize) -> Box<dyn Fn(Vec<Vec<T>>, T) -> Vec<Vec<T>>> {
-    Box::new(move |mut acc, x| {
-        if acc.last().map_or(false, |x| x.len() < group_size) {
-            acc.last_mut().unwrap().push(x);
-        } else {
-            let mut new_group = Vec::with_capacity(group_size);
-            new_group.push(x);
-            acc.push(new_group);
-        }
-        acc
-    })
 }
 
 /**
@@ -173,16 +156,16 @@ pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
     check_nk(n, k)?;
     check_data_len(data)?;
 
-    // Restore the shares into one buffer
-    let mut tmp = vec![0; SHARE_SIZE * (n as usize)];
-    unsafe {
-        sss_create_shares(tmp.as_mut_ptr(), data.as_ptr(), n, k);
+    let key = rand::random::<[u8; KEY_SIZE]>();
+    let mut shares = hazmat::create_keyshares(&key, n, k)?;
+    let mut cipher = XSalsa20Poly1305::new(&key.into());
+    let ciphertext = cipher
+        .encrypt(&[0; xsalsa20poly1305::NONCE_SIZE].into(), data)
+        .expect("xsalsa20poly1305 encryption error");
+    for share in shares.iter_mut() {
+        share.extend_from_slice(&ciphertext);
     }
-
-    // Put each share in a separate Vec
-    Ok(tmp
-        .into_iter()
-        .fold(Vec::with_capacity(n as usize), &*group(SHARE_SIZE)))
+    Ok(shares)
 }
 
 /**
@@ -230,21 +213,22 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
         }
     }
 
-    // Build a slice containing all the shares sequentially
-    let mut tmp = Vec::with_capacity(SHARE_SIZE * shares.len());
-    for share in shares {
-        tmp.extend(share.iter());
+    let mut keyshares = Vec::with_capacity(shares.len());
+    for share in shares.iter() {
+        keyshares.push(share[..KEYSHARE_SIZE].to_owned());
     }
-
-    // Combine the shares
-    let mut data = vec![0; DATA_SIZE];
-    let ret =
-        unsafe { sss_combine_shares(data.as_mut_ptr(), tmp.as_mut_ptr(), shares.len() as u8) };
-
-    match ret {
-        0 => Ok(Some(data)),
-        _ => Ok(None),
+    let key_vec = hazmat::combine_keyshares(&keyshares)?;
+    let mut key = [0; KEY_SIZE];
+    key.copy_from_slice(&key_vec);
+    let mut cipher = XSalsa20Poly1305::new(&key.into());
+    for share in shares.iter() {
+        let ciphertext = &share[KEYSHARE_SIZE..];
+        let nonce = [0; NONCE_SIZE];
+        if let Ok(plaintext) = cipher.decrypt(&nonce.into(), ciphertext) {
+            return Ok(Some(plaintext));
+        }
     }
+    Ok(None)
 }
 
 pub mod hazmat {
@@ -831,19 +815,6 @@ mod tests {
     use super::*;
     use std::error::Error;
     const DATA: &[u8] = &[42; DATA_SIZE];
-
-    #[test]
-    fn test_group() {
-        let dna = vec!['C', 'T', 'G', 'G', 'A', 'A', 'C', 'A', 'G'];
-        let expected = vec![
-            vec!['C', 'T', 'G'],
-            vec!['G', 'A', 'A'],
-            vec!['C', 'A', 'G'],
-        ];
-
-        let triplets = dna.into_iter().fold(Vec::new(), &*group(3));
-        assert_eq!(triplets, expected);
-    }
 
     #[test]
     fn test_create_shares_ok() {
