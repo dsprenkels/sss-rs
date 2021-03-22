@@ -1,16 +1,16 @@
 [package]
-name = "shamirsecretsharing"
-version = "0.1.4"
 authors = ["Daan Sprenkels <daan@dsprenkels.com>"]
-description = "Shamir secret sharing library for Rust"
-license = "MIT"
-repository = "https://github.com/dsprenkels/sss-rs"
-documentation = "https://docs.rs/shamirsecretsharing"
 categories = ["cryptography"]
+description = "Shamir secret sharing library for Rust"
+documentation = "https://docs.rs/shamirsecretsharing"
+license = "MIT"
+name = "shamirsecretsharing"
+repository = "https://github.com/dsprenkels/sss-rs"
+version = "0.1.4"
 
 [badges]
-travis-ci = { repository = "dsprenkels/sss-rs", branch = "master" }
-maintenance = { status = "passively-maintained" }
+maintenance = {status = "passively-maintained"}
+travis-ci = {repository = "dsprenkels/sss-rs", branch = "master"}
 
 [features]
 have_libsodium = []
