@@ -66,6 +66,13 @@ assert_eq!(restored2, None);
   access to a accurate timing channel to iteratively guess shares during the
   execution of `combine_shares`.
 
+### Version 0.1.5
+
+- This library used to link to my `sss` library that was written in C.  From
+  this version, the complete library is written only in Rust.
+- The `have_libsodium` feature flag is deprecated.
+- The minimum required rustc version is now 1.44.0.
+
 ## Questions
 
 Feel free to [open an issue](https://github.com/dsprenkels/sss-rs/issues/new)

@@ -6,7 +6,7 @@ documentation = "https://docs.rs/shamirsecretsharing"
 license = "MIT"
 name = "shamirsecretsharing"
 repository = "https://github.com/dsprenkels/sss-rs"
-version = "0.1.4"
+version = "0.1.5"
 
 [badges]
 maintenance = {status = "passively-maintained"}
