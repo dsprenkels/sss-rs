@@ -13,6 +13,8 @@ maintenance = {status = "passively-maintained"}
 travis-ci = {repository = "dsprenkels/sss-rs", branch = "master"}
 
 [features]
+# DEPRECATED: There is a version of libsodium linked in.  This feature flag does not do
+# anything at the moment, and will be removed in version 0.2.
 have_libsodium = []
 
 [dependencies]
