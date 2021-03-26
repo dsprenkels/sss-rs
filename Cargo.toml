@@ -18,8 +18,8 @@ travis-ci = {repository = "dsprenkels/sss-rs", branch = "master"}
 have_libsodium = []
 
 [dependencies]
-rand = "0.7"
-xsalsa20poly1305 = "0.6.0"
+rand = "0.8"
+xsalsa20poly1305 = "0.6"
 
 [dev-dependencies]
 chacha20-poly1305-aead = "0.1"
