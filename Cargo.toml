@@ -6,7 +6,7 @@ documentation = "https://docs.rs/shamirsecretsharing"
 license = "MIT"
 name = "shamirsecretsharing"
 repository = "https://github.com/dsprenkels/sss-rs"
-version = "0.1.5"
+version = "0.1.6"
 
 [badges]
 maintenance = {status = "passively-maintained"}
@@ -18,11 +18,8 @@ travis-ci = {repository = "dsprenkels/sss-rs", branch = "master"}
 have_libsodium = []
 
 [dependencies]
-rand = "0.8"
-xsalsa20poly1305 = "0.6"
+rand = "0.8.5"
+xsalsa20poly1305 = "0.8"
 
 [dev-dependencies]
 chacha20-poly1305-aead = "0.1"
-
-[build-dependencies]
-cc = "1.0"
