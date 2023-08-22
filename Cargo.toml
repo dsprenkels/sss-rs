@@ -6,7 +6,7 @@ documentation = "https://docs.rs/shamirsecretsharing"
 license = "MIT"
 name = "shamirsecretsharing"
 repository = "https://github.com/dsprenkels/sss-rs"
-version = "0.1.6"
+version = "0.1.7"
 
 [badges]
 maintenance = {status = "passively-maintained"}
@@ -19,7 +19,7 @@ have_libsodium = []
 
 [dependencies]
 rand = "0.8.5"
-xsalsa20poly1305 = "0.8"
+crypto_secretbox = "0.1"
 
 [dev-dependencies]
 chacha20-poly1305-aead = "0.1"

@@ -50,14 +50,13 @@ This library supports can generate sets with at most `count` and a `treshold` sh
 #![warn(missing_docs)]
 
 extern crate rand;
-extern crate xsalsa20poly1305;
+extern crate crypto_secretbox;
 use hazmat::{KEYSHARE_SIZE, KEY_SIZE};
-#[link(name = "sss", kind = "static")]
 use std::error;
 use std::fmt;
-use xsalsa20poly1305::{
-    aead::{AeadMut, NewAead},
-    XSalsa20Poly1305, NONCE_SIZE,
+use crypto_secretbox::{
+    aead::{Aead, KeyInit},
+    XSalsa20Poly1305,
 };
 
 /// Custom error types for errors originating from this crate
@@ -158,9 +157,9 @@ pub fn create_shares(data: &[u8], n: u8, k: u8) -> SSSResult<Vec<Vec<u8>>> {
 
     let key = rand::random::<[u8; KEY_SIZE]>();
     let mut shares = hazmat::create_keyshares(&key, n, k)?;
-    let mut cipher = XSalsa20Poly1305::new(&key.into());
+    let cipher = XSalsa20Poly1305::new(&key.into());
     let ciphertext = cipher
-        .encrypt(&[0; xsalsa20poly1305::NONCE_SIZE].into(), data)
+        .encrypt(&[0; XSalsa20Poly1305::NONCE_SIZE].into(), data)
         .expect("xsalsa20poly1305 encryption error");
     for share in shares.iter_mut() {
         share.extend_from_slice(&ciphertext);
@@ -220,10 +219,10 @@ pub fn combine_shares(shares: &[Vec<u8>]) -> SSSResult<Option<Vec<u8>>> {
     let key_vec = hazmat::combine_keyshares(&keyshares)?;
     let mut key = [0; KEY_SIZE];
     key.copy_from_slice(&key_vec);
-    let mut cipher = XSalsa20Poly1305::new(&key.into());
+    let cipher = XSalsa20Poly1305::new(&key.into());
     for share in shares.iter() {
         let ciphertext = &share[KEYSHARE_SIZE..];
-        let nonce = [0; NONCE_SIZE];
+        let nonce = [0; XSalsa20Poly1305::NONCE_SIZE];
         if let Ok(plaintext) = cipher.decrypt(&nonce.into(), ciphertext) {
             return Ok(Some(plaintext));
         }
