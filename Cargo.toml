@@ -18,7 +18,7 @@ have_libsodium = []
 
 [dependencies]
 rand = "0.8.5"
-crypto_secretbox = "0.1"
+crypto_secretbox = { version = "0.1", default-features = false, features = ["salsa20", "alloc"] }
 
 [dev-dependencies]
 chacha20-poly1305-aead = "0.1"
