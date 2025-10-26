@@ -73,6 +73,11 @@ assert_eq!(restored2, None);
 - The `have_libsodium` feature flag is deprecated.
 - The minimum required rustc version is now 1.44.0.
 
+### Version 0.1.7
+
+- Use `crypto-secretbox` crate instead of `xsalsa20poly1305`
+  ([#12](https://github.com/dsprenkels/sss-rs/pull/12)).
+
 ## Questions
 
 Feel free to [open an issue](https://github.com/dsprenkels/sss-rs/issues/new)
