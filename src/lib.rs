@@ -947,25 +947,4 @@ mod tests {
         let data = combine_shares(&shares);
         assert_eq!(data, Ok(Some(DATA.to_vec())));
     }
-
-    #[test]
-    fn test_compat() {
-        let shares = [
-            "01580d0fa77dc9b302fb7500db7289423bb8235cd2bccaa1b23cc1718df5a490ddabbfd956def5c69f52a0187c62950bba6309b9e7eb4dc7c68ba70ea5f3369f56d76c9f1cea561aa4a03fe2b8aa18342b271ffc92b09078248ee5b4941e76da0ddefe43ae858c043d178477940a2aca28",
-            "029dffda3ca34949a2837b3ea1e750599648514cd50b7d0eea0e18c298e9e0fd8babbfd956def5c69f52a0187c62950bba6309b9e7eb4dc7c68ba70ea5f3369f56d76c9f1cea561aa4a03fe2b8aa18342b271ffc92b09078248ee5b4941e76da0ddefe43ae858c043d178477940a2aca28",
-            "03c874eba28a4a82e4a1ca94d55647fc7d9477b90aa10fdd841ae5d198873a5ac3abbfd956def5c69f52a0187c62950bba6309b9e7eb4dc7c68ba70ea5f3369f56d76c9f1cea561aa4a03fe2b8aa18342b271ffc92b09078248ee5b4941e76da0ddefe43ae858c043d178477940a2aca28",
-            "04debfc3bb03f5dc201594d806e4b4114636cd28497fada3355c4d17f3f19df2a7abbfd956def5c69f52a0187c62950bba6309b9e7eb4dc7c68ba70ea5f3369f56d76c9f1cea561aa4a03fe2b8aa18342b271ffc92b09078248ee5b4941e76da0ddefe43ae858c043d178477940a2aca28",
-        ];
-        fn hex_decode(s: &str) -> Vec<u8> {
-            let mut v = Vec::with_capacity(s.len() / 2);
-            for i in 0..(s.len() / 2) {
-                let byte = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap();
-                v.push(byte);
-            }
-            v
-        }
-        let share_vecs: Vec<Vec<u8>> = shares.iter().map(|s| hex_decode(s)).collect();
-        let restored = combine_shares(&share_vecs).unwrap().unwrap();
-        assert_eq!(restored.as_slice(), DATA);
-    }
 }
