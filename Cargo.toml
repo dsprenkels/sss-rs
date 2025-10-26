@@ -1,5 +1,4 @@
 [package]
-authors = ["Amber Sprenkels <amber@electricdusk.com>"]
 categories = ["cryptography"]
 description = "Shamir secret sharing library for Rust"
 documentation = "https://docs.rs/shamirsecretsharing"
